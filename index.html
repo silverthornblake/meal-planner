@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Weekly Meal Planner</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d0d0b;
+    --surface: #141410;
+    --surface2: #1c1c16;
+    --border: #2a2a20;
+    --border2: #333328;
+    --gold: #c8a84b;
+    --gold-dim: #7a6428;
+    --gold-bg: rgba(200,168,75,0.08);
+    --text: #e8e0cc;
+    --text-dim: #7a7060;
+    --text-mid: #a89878;
+    --green: #5a9a5a;
+    --green-bg: rgba(90,154,90,0.12);
+    --red: #c05a3a;
+    --red-bg: rgba(192,90,58,0.1);
+    --blue: #4a7aaa;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 300;
+    min-height: 100vh;
+  }
+
+  /* HEADER */
+  .header {
+    background: linear-gradient(160deg, #1a1a10 0%, #0d0d0b 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 28px 24px 20px;
+    position: relative;
+    overflow: hidden;
+  }
+  .header::before {
+    content: '';
+    position: absolute;
+    top: -60px; left: 50%;
+    transform: translateX(-50%);
+    width: 600px; height: 200px;
+    background: radial-gradient(ellipse, rgba(200,168,75,0.07) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .header-inner { max-width: 700px; margin: 0 auto; }
+  .header-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  .header-title { font-family: 'Playfair Display', serif; font-size: clamp(22px,4vw,30px); color: var(--text); font-weight: 400; }
+  .header-sub { font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); margin-bottom: 8px; }
+  .week-nav { display: flex; align-items: center; gap: 12px; }
+  .week-btn {
+    background: var(--surface2); border: 1px solid var(--border2);
+    color: var(--text-mid); width: 32px; height: 32px; border-radius: 8px;
+    cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s;
+  }
+  .week-btn:hover { border-color: var(--gold); color: var(--gold); }
+  .week-label { font-size: 13px; color: var(--text-mid); white-space: nowrap; }
+
+  /* MACRO BAR */
+  .macro-bar { max-width: 700px; margin: 0 auto; margin-top: 16px; }
+  .macro-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .macro-card {
+    flex: 1; min-width: 80px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 14px;
+  }
+  .macro-val { font-size: 18px; font-weight: 500; color: var(--gold); }
+  .macro-goal { font-size: 11px; color: var(--text-dim); }
+  .macro-label { font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--text-dim); margin-top: 2px; }
+  .macro-progress { height: 3px; background: var(--border); border-radius: 2px; margin-top: 8px; overflow: hidden; }
+  .macro-fill { height: 100%; border-radius: 2px; transition: width 0.5s ease; }
+
+  /* TABS */
+  .tabs {
+    display: flex; background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 0 20px; position: sticky; top: 0; z-index: 20;
+  }
+  .tab {
+    background: none; border: none; border-bottom: 2px solid transparent;
+    color: var(--text-dim); padding: 14px 18px 12px;
+    cursor: pointer; font-size: 13px; font-family: inherit;
+    letter-spacing: 0.05em; transition: all 0.2s; display: flex; align-items: center; gap: 8px;
+  }
+  .tab.active { color: var(--text); border-bottom-color: var(--gold); }
+  .tab-badge {
+    font-size: 10px; background: var(--surface2); color: var(--text-dim);
+    padding: 2px 6px; border-radius: 8px;
+  }
+  .tab.active .tab-badge { background: var(--gold-bg); color: var(--gold); }
+
+  /* MAIN */
+  .main { max-width: 700px; margin: 0 auto; padding: 20px 16px 80px; }
+
+  /* PANELS */
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* DAY CARDS */
+  .day-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; margin-bottom: 12px; overflow: hidden;
+    transition: border-color 0.2s;
+  }
+  .day-card.complete { border-color: rgba(90,154,90,0.4); }
+  .day-header {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 16px; cursor: pointer;
+  }
+  .day-name { font-family: 'Playfair Display', serif; font-size: 16px; flex: 1; }
+  .day-calories { font-size: 12px; color: var(--text-dim); }
+  .day-check {
+    width: 24px; height: 24px; border-radius: 50%;
+    border: 1.5px solid var(--border2); display: flex;
+    align-items: center; justify-content: center;
+    cursor: pointer; transition: all 0.2s; flex-shrink: 0;
+    background: transparent; font-size: 12px;
+  }
+  .day-check.done { background: var(--green); border-color: var(--green); color: white; }
+  .day-chevron { font-size: 11px; color: var(--text-dim); transition: transform 0.2s; }
+  .day-card.open .day-chevron { transform: rotate(90deg); }
+
+  /* MEALS */
+  .meals { border-top: 1px solid var(--border); }
+  .meal-row {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 12px 16px; border-bottom: 1px solid var(--border);
+    cursor: pointer; transition: background 0.15s;
+  }
+  .meal-row:last-child { border-bottom: none; }
+  .meal-row:hover { background: rgba(255,255,255,0.02); }
+  .meal-type {
+    font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase;
+    color: var(--text-dim); min-width: 70px; padding-top: 2px;
+  }
+  .meal-info { flex: 1; }
+  .meal-name { font-size: 14px; color: var(--text); margin-bottom: 3px; }
+  .meal-macros { font-size: 11px; color: var(--text-dim); }
+  .meal-check {
+    width: 20px; height: 20px; border-radius: 5px;
+    border: 1.5px solid var(--border2); display: flex;
+    align-items: center; justify-content: center;
+    transition: all 0.2s; flex-shrink: 0; margin-top: 2px;
+    background: transparent; font-size: 10px; cursor: pointer;
+  }
+  .meal-check.done { background: var(--green); border-color: var(--green); color: white; }
+
+  /* GOAL RING */
+  .goal-section { margin-bottom: 20px; }
+  .goal-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 20px;
+  }
+  .goal-title { font-family: 'Playfair Display', serif; font-size: 18px; margin-bottom: 16px; }
+  .goal-ring-wrap { display: flex; align-items: center; gap: 24px; margin-bottom: 20px; flex-wrap: wrap; }
+  .ring-svg { width: 90px; height: 90px; flex-shrink: 0; }
+  .ring-stats { flex: 1; }
+  .ring-stat { margin-bottom: 10px; }
+  .ring-stat-label { font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 3px; }
+  .ring-stat-val { font-size: 22px; color: var(--gold); font-weight: 500; }
+  .ring-stat-sub { font-size: 12px; color: var(--text-dim); }
+
+  /* WEEKLY PROGRESS */
+  .week-progress { display: grid; grid-template-columns: repeat(7,1fr); gap: 6px; margin-top: 16px; }
+  .week-day-dot {
+    aspect-ratio: 1; border-radius: 50%;
+    background: var(--surface2); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px; color: var(--text-dim); flex-direction: column; gap: 2px;
+    cursor: default;
+  }
+  .week-day-dot.done { background: var(--green-bg); border-color: var(--green); color: var(--green); }
+  .week-day-dot.today { border-color: var(--gold); }
+  .week-day-label { font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; }
+
+  /* SHOPPING */
+  .shop-category { margin-bottom: 18px; }
+  .shop-cat-header {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 8px; padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    font-size: 10px; letter-spacing: 0.25em; text-transform: uppercase; color: var(--text-dim);
+  }
+  .shop-dot { width: 7px; height: 7px; border-radius: 50%; }
+  .shop-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 11px 14px; margin-bottom: 5px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; cursor: pointer; transition: all 0.2s;
+  }
+  .shop-item.checked { opacity: 0.4; }
+  .shop-cb {
+    width: 20px; height: 20px; border-radius: 5px;
+    border: 1.5px solid var(--border2); display: flex;
+    align-items: center; justify-content: center;
+    transition: all 0.2s; flex-shrink: 0; font-size: 10px;
+    background: transparent;
+  }
+  .shop-item.checked .shop-cb { background: var(--green); border-color: var(--green); color: white; }
+  .shop-item-name { flex: 1; font-size: 14px; }
+  .shop-item.checked .shop-item-name { text-decoration: line-through; color: var(--text-dim); }
+  .shop-item-qty { font-size: 12px; color: var(--text-dim); font-style: italic; }
+  .shop-clear { background: none; border: 1px solid var(--border); color: var(--text-dim); padding: 6px 14px; border-radius: 8px; cursor: pointer; font-size: 12px; font-family: inherit; }
+
+  /* SETTINGS */
+  .settings-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px; margin-bottom: 16px; }
+  .settings-title { font-family: 'Playfair Display', serif; font-size: 16px; margin-bottom: 16px; }
+  .settings-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+  .settings-label { font-size: 13px; color: var(--text-mid); }
+  .settings-input {
+    background: var(--surface2); border: 1px solid var(--border2);
+    color: var(--text); padding: 8px 12px; border-radius: 8px;
+    font-family: inherit; font-size: 14px; width: 120px; text-align: right;
+  }
+  .settings-input:focus { outline: none; border-color: var(--gold); }
+  .save-btn {
+    background: var(--gold-bg); border: 1px solid var(--gold-dim);
+    color: var(--gold); padding: 10px 20px; border-radius: 10px;
+    cursor: pointer; font-family: inherit; font-size: 14px; width: 100%;
+    margin-top: 4px; transition: all 0.2s;
+  }
+  .save-btn:hover { background: rgba(200,168,75,0.15); }
+
+  .empty-state { text-align: center; padding: 40px 20px; color: var(--text-dim); font-style: italic; font-size: 14px; }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  .panel.active { animation: fadeIn 0.2s ease; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-inner">
+    <div class="header-top">
+      <div>
+        <div class="header-sub">Weekly Meal Planner</div>
+        <div class="header-title">This Week</div>
+      </div>
+      <div class="week-nav">
+        <button class="week-btn" onclick="changeWeek(-1)">‹</button>
+        <span class="week-label" id="weekLabel">Loading...</span>
+        <button class="week-btn" onclick="changeWeek(1)">›</button>
+      </div>
+    </div>
+    <div class="macro-bar">
+      <div class="macro-row" id="macroRow"></div>
+    </div>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('plan',this)">
+    Plan <span class="tab-badge" id="planBadge">0/7</span>
+  </button>
+  <button class="tab" onclick="switchTab('shopping',this)">
+    Shopping <span class="tab-badge" id="shopBadge">0</span>
+  </button>
+  <button class="tab" onclick="switchTab('goals',this)">
+    Goals
+  </button>
+  <button class="tab" onclick="switchTab('settings',this)">
+    Settings
+  </button>
+</div>
+
+<div class="main">
+
+  <!-- PLAN -->
+  <div class="panel active" id="panel-plan">
+    <div id="dayCards"></div>
+  </div>
+
+  <!-- SHOPPING -->
+  <div class="panel" id="panel-shopping">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <p style="font-size:13px;color:var(--text-dim);font-style:italic;">Combined list for this week's meals</p>
+      <button class="shop-clear" onclick="clearShopping()">Clear all</button>
+    </div>
+    <div id="shopList"></div>
+  </div>
+
+  <!-- GOALS -->
+  <div class="panel" id="panel-goals">
+    <div class="goal-section">
+      <div class="goal-card">
+        <div class="goal-title">Weekly Progress</div>
+        <div class="goal-ring-wrap">
+          <svg class="ring-svg" viewBox="0 0 90 90">
+            <circle cx="45" cy="45" r="36" fill="none" stroke="#2a2a20" stroke-width="8"/>
+            <circle cx="45" cy="45" r="36" fill="none" stroke="#c8a84b" stroke-width="8"
+              stroke-linecap="round" stroke-dasharray="226.2" id="goalRing"
+              stroke-dashoffset="226.2" transform="rotate(-90 45 45)" style="transition:stroke-dashoffset 0.6s ease"/>
+            <text x="45" y="48" text-anchor="middle" fill="#c8a84b" font-size="18" font-family="DM Sans" font-weight="500" id="ringPct">0%</text>
+          </svg>
+          <div class="ring-stats">
+            <div class="ring-stat">
+              <div class="ring-stat-label">Days Complete</div>
+              <div class="ring-stat-val" id="daysComplete">0 / 7</div>
+            </div>
+            <div class="ring-stat">
+              <div class="ring-stat-label">Meals Logged</div>
+              <div class="ring-stat-val" id="mealsLogged">0</div>
+              <div class="ring-stat-sub" id="mealsTotal">of 0 planned</div>
+            </div>
+          </div>
+        </div>
+        <div class="week-progress" id="weekDots"></div>
+      </div>
+    </div>
+
+    <div class="goal-card" style="margin-top:12px;">
+      <div class="goal-title">Calorie Tracking</div>
+      <div id="calGoalRows"></div>
+    </div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div class="panel" id="panel-settings">
+    <div class="settings-card">
+      <div class="settings-title">Daily Targets</div>
+      <div class="settings-row">
+        <span class="settings-label">Calorie Goal</span>
+        <input class="settings-input" type="number" id="set-cal" placeholder="2000">
+      </div>
+      <div class="settings-row">
+        <span class="settings-label">Protein Goal (g)</span>
+        <input class="settings-input" type="number" id="set-protein" placeholder="150">
+      </div>
+      <div class="settings-row">
+        <span class="settings-label">Carbs Goal (g)</span>
+        <input class="settings-input" type="number" id="set-carbs" placeholder="200">
+      </div>
+      <div class="settings-row">
+        <span class="settings-label">Fat Goal (g)</span>
+        <input class="settings-input" type="number" id="set-fat" placeholder="65">
+      </div>
+      <button class="save-btn" onclick="saveSettings()">Save Targets</button>
+    </div>
+    <div class="settings-card">
+      <div class="settings-title">Data</div>
+      <button class="save-btn" onclick="resetAll()" style="background:var(--red-bg);border-color:var(--red);color:var(--red);">Reset All Data</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ─── DEFAULT DATA ───────────────────────────────────────────────
+const DEFAULT_SETTINGS = { cal: 2000, protein: 150, carbs: 200, fat: 65 };
+
+const WEEK_PLAN = [
+  {
+    day: "Monday", meals: [
+      { type: "Breakfast", name: "Greek Yogurt Bowl with Berries & Granola", cal: 380, protein: 22, carbs: 48, fat: 10 },
+      { type: "Lunch",     name: "Grilled Chicken & Quinoa Salad",           cal: 520, protein: 45, carbs: 38, fat: 14 },
+      { type: "Dinner",    name: "Miso-Glazed Cod with Bok Choy & Brown Rice", cal: 475, protein: 49, carbs: 42, fat: 11 },
+      { type: "Snack",     name: "Almonds & Apple",                           cal: 210, protein: 5,  carbs: 24, fat: 12 },
+    ]
+  },
+  {
+    day: "Tuesday", meals: [
+      { type: "Breakfast", name: "Avocado Toast with Poached Eggs",          cal: 420, protein: 18, carbs: 36, fat: 22 },
+      { type: "Lunch",     name: "Turkey & Hummus Wrap",                     cal: 490, protein: 34, carbs: 45, fat: 16 },
+      { type: "Dinner",    name: "Harissa Salmon with Roasted Chickpeas",    cal: 640, protein: 57, carbs: 32, fat: 24 },
+      { type: "Snack",     name: "Cottage Cheese & Cucumber",                cal: 150, protein: 18, carbs: 6,  fat: 3  },
+    ]
+  },
+  {
+    day: "Wednesday", meals: [
+      { type: "Breakfast", name: "Overnight Oats with Chia & Banana",        cal: 410, protein: 16, carbs: 62, fat: 9  },
+      { type: "Lunch",     name: "Lentil Soup with Crusty Bread",            cal: 440, protein: 22, carbs: 68, fat: 7  },
+      { type: "Dinner",    name: "Seared Chicken Thighs with Roasted Veg",   cal: 530, protein: 48, carbs: 28, fat: 22 },
+      { type: "Snack",     name: "Protein Shake",                            cal: 180, protein: 25, carbs: 8,  fat: 4  },
+    ]
+  },
+  {
+    day: "Thursday", meals: [
+      { type: "Breakfast", name: "Scrambled Eggs with Smoked Salmon",        cal: 390, protein: 32, carbs: 8,  fat: 26 },
+      { type: "Lunch",     name: "Farro Bowl with Roasted Beets & Feta",     cal: 510, protein: 18, carbs: 72, fat: 16 },
+      { type: "Dinner",    name: "Lamb Kofta Bowls with Tabbouleh",          cal: 580, protein: 42, carbs: 44, fat: 24 },
+      { type: "Snack",     name: "Mixed Nuts & Dark Chocolate",              cal: 220, protein: 5,  carbs: 16, fat: 16 },
+    ]
+  },
+  {
+    day: "Friday", meals: [
+      { type: "Breakfast", name: "Smoothie Bowl — Acai, Mango, Hemp Seeds",  cal: 360, protein: 14, carbs: 52, fat: 12 },
+      { type: "Lunch",     name: "Shrimp Tacos with Mango Slaw",             cal: 540, protein: 32, carbs: 58, fat: 14 },
+      { type: "Dinner",    name: "Pan-Seared Duck Breast with Cherry Sauce", cal: 620, protein: 48, carbs: 22, fat: 32 },
+      { type: "Snack",     name: "Rice Cakes with Almond Butter",            cal: 190, protein: 5,  carbs: 22, fat: 9  },
+    ]
+  },
+  {
+    day: "Saturday", meals: [
+      { type: "Breakfast", name: "Shakshuka with Feta & Sourdough",          cal: 480, protein: 26, carbs: 44, fat: 22 },
+      { type: "Lunch",     name: "Grilled Halloumi Salad",                   cal: 420, protein: 22, carbs: 18, fat: 28 },
+      { type: "Dinner",    name: "Braised Short Ribs with Creamy Polenta",   cal: 740, protein: 52, carbs: 38, fat: 38 },
+      { type: "Snack",     name: "Charcuterie — Cheese, Fruit, Crackers",    cal: 280, protein: 10, carbs: 26, fat: 16 },
+    ]
+  },
+  {
+    day: "Sunday", meals: [
+      { type: "Breakfast", name: "Fluffy Ricotta Pancakes with Maple",       cal: 520, protein: 18, carbs: 72, fat: 18 },
+      { type: "Lunch",     name: "Chicken Noodle Soup — Homemade",           cal: 380, protein: 28, carbs: 42, fat: 8  },
+      { type: "Dinner",    name: "Whole Roasted Chicken with Root Veg",      cal: 620, protein: 56, carbs: 28, fat: 28 },
+      { type: "Snack",     name: "Greek Yogurt with Honey",                  cal: 160, protein: 14, carbs: 20, fat: 3  },
+    ]
+  },
+];
+
+const SHOPPING = [
+  { category: "Protein", color: "#c87040", items: [
+    { name: "Cod fillets (6–8 oz each)", qty: "2", id: "s1" },
+    { name: "Salmon fillets", qty: "2", id: "s2" },
+    { name: "Chicken thighs, bone-in", qty: "4", id: "s3" },
+    { name: "Ground lamb", qty: "1 lb", id: "s4" },
+    { name: "Duck breast", qty: "2", id: "s5" },
+    { name: "Short ribs", qty: "2 lbs", id: "s6" },
+    { name: "Whole chicken", qty: "1 (4–5 lb)", id: "s7" },
+    { name: "Shrimp, peeled", qty: "½ lb", id: "s8" },
+    { name: "Smoked salmon", qty: "4 oz", id: "s9" },
+  ]},
+  { category: "Produce", color: "#5a9a5a", items: [
+    { name: "Baby bok choy", qty: "2 heads", id: "s10" },
+    { name: "Mixed berries", qty: "1 pint", id: "s11" },
+    { name: "Avocados", qty: "3", id: "s12" },
+    { name: "Banana", qty: "2", id: "s13" },
+    { name: "Mango", qty: "2", id: "s14" },
+    { name: "Roasted beets", qty: "4", id: "s15" },
+    { name: "Root vegetables (carrots, parsnips)", qty: "1 lb each", id: "s16" },
+    { name: "Cherry tomatoes", qty: "1 pint", id: "s17" },
+    { name: "Cucumber", qty: "1", id: "s18" },
+  ]},
+  { category: "Pantry & Grains", color: "#4a7aaa", items: [
+    { name: "White miso paste", qty: "1 container", id: "s19" },
+    { name: "Mirin", qty: "1 bottle", id: "s20" },
+    { name: "Sake or dry sherry", qty: "1 bottle", id: "s21" },
+    { name: "Harissa paste", qty: "1 jar", id: "s22" },
+    { name: "Brown rice", qty: "2 cups dry", id: "s23" },
+    { name: "Quinoa", qty: "1 cup dry", id: "s24" },
+    { name: "Farro", qty: "1 cup dry", id: "s25" },
+    { name: "Canned chickpeas", qty: "2 cans", id: "s26" },
+    { name: "Green lentils", qty: "1 cup dry", id: "s27" },
+    { name: "Polenta", qty: "1 cup", id: "s28" },
+  ]},
+  { category: "Dairy & Fridge", color: "#9a6aaa", items: [
+    { name: "Greek yogurt (full fat)", qty: "32 oz", id: "s29" },
+    { name: "Eggs", qty: "1 dozen", id: "s30" },
+    { name: "Feta cheese", qty: "4 oz", id: "s31" },
+    { name: "Halloumi", qty: "8 oz", id: "s32" },
+    { name: "Ricotta", qty: "8 oz", id: "s33" },
+    { name: "Cottage cheese", qty: "16 oz", id: "s34" },
+  ]},
+];
+
+// ─── STATE ───────────────────────────────────────────────────────
+let state = {
+  settings: { ...DEFAULT_SETTINGS },
+  mealChecks: {},   // { "weekKey-dayIndex-mealIndex": true }
+  dayChecks: {},    // { "weekKey-dayIndex": true }
+  shopChecks: {},   // { "itemId": true }
+  currentWeekOffset: 0,
+};
+
+function loadState() {
+  try {
+    const saved = localStorage.getItem('mealplanner_v2');
+    if (saved) Object.assign(state, JSON.parse(saved));
+  } catch(e) {}
+}
+function saveState() {
+  localStorage.setItem('mealplanner_v2', JSON.stringify(state));
+}
+
+// ─── WEEK HELPERS ────────────────────────────────────────────────
+function getWeekStart(offset = 0) {
+  const d = new Date();
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  const mon = new Date(d.setDate(diff));
+  mon.setDate(mon.getDate() + offset * 7);
+  mon.setHours(0,0,0,0);
+  return mon;
+}
+function weekKey(offset) {
+  return getWeekStart(offset).toISOString().slice(0,10);
+}
+function formatWeekLabel(offset) {
+  const start = getWeekStart(offset);
+  const end = new Date(start); end.setDate(end.getDate() + 6);
+  const fmt = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return `${fmt(start)} – ${fmt(end)}`;
+}
+function todayDayIndex() {
+  const d = new Date().getDay();
+  return d === 0 ? 6 : d - 1;
+}
+
+// ─── TABS ────────────────────────────────────────────────────────
+function switchTab(id, btn) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('panel-' + id).classList.add('active');
+  btn.classList.add('active');
+  if (id === 'goals') renderGoals();
+}
+
+// ─── WEEK NAV ────────────────────────────────────────────────────
+function changeWeek(dir) {
+  state.currentWeekOffset += dir;
+  saveState();
+  render();
+}
+
+// ─── RENDER ALL ─────────────────────────────────────────────────
+function render() {
+  document.getElementById('weekLabel').textContent = formatWeekLabel(state.currentWeekOffset);
+  renderMacroBar();
+  renderDays();
+  renderShopping();
+  renderGoals();
+  renderSettings();
+  updateBadges();
+}
+
+// ─── MACRO BAR ──────────────────────────────────────────────────
+function renderMacroBar() {
+  const wk = weekKey(state.currentWeekOffset);
+  let totalCal = 0, totalProtein = 0, totalCarbs = 0, totalFat = 0, mealCount = 0;
+  WEEK_PLAN.forEach((day, di) => {
+    day.meals.forEach((meal, mi) => {
+      if (state.mealChecks[`${wk}-${di}-${mi}`]) {
+        totalCal += meal.cal; totalProtein += meal.protein;
+        totalCarbs += meal.carbs; totalFat += meal.fat; mealCount++;
+      }
+    });
+  });
+  const s = state.settings;
+  const macros = [
+    { label: 'Calories', val: totalCal, goal: s.cal * 7, color: '#c8a84b' },
+    { label: 'Protein', val: totalProtein, goal: s.protein * 7, unit: 'g', color: '#5a9a8a' },
+    { label: 'Carbs', val: totalCarbs, goal: s.carbs * 7, unit: 'g', color: '#4a7aaa' },
+    { label: 'Fat', val: totalFat, goal: s.fat * 7, unit: 'g', color: '#aa7a4a' },
+  ];
+  document.getElementById('macroRow').innerHTML = macros.map(m => {
+    const pct = Math.min(100, Math.round((m.val / m.goal) * 100));
+    return `<div class="macro-card">
+      <div class="macro-val">${m.val.toLocaleString()}${m.unit||''}</div>
+      <div class="macro-goal">/ ${m.goal.toLocaleString()}${m.unit||''} weekly</div>
+      <div class="macro-label">${m.label}</div>
+      <div class="macro-progress"><div class="macro-fill" style="width:${pct}%;background:${m.color}"></div></div>
+    </div>`;
+  }).join('');
+}
+
+// ─── DAYS ────────────────────────────────────────────────────────
+let openDay = null;
+function renderDays() {
+  const wk = weekKey(state.currentWeekOffset);
+  const todayIdx = state.currentWeekOffset === 0 ? todayDayIndex() : -1;
+  document.getElementById('dayCards').innerHTML = WEEK_PLAN.map((day, di) => {
+    const dayDone = state.dayChecks[`${wk}-${di}`];
+    const allMealsDone = day.meals.every((_,mi) => state.mealChecks[`${wk}-${di}-${mi}`]);
+    const checkedMeals = day.meals.filter((_,mi) => state.mealChecks[`${wk}-${di}-${mi}`]).length;
+    const dayTotal = day.meals.reduce((s,m) => s + m.cal, 0);
+    const isOpen = openDay === di;
+    const isToday = di === todayIdx;
+    return `<div class="day-card${dayDone?' complete':''}${isOpen?' open':''}" id="daycard-${di}">
+      <div class="day-header" onclick="toggleDay(${di})">
+        <div class="day-check${dayDone?' done':''}" onclick="event.stopPropagation();toggleDayCheck(${di})">${dayDone?'✓':''}</div>
+        <div class="day-name">${day.day}${isToday?' <span style="font-size:10px;color:var(--gold);letter-spacing:0.1em;font-family:\'DM Sans\',sans-serif">TODAY</span>':''}</div>
+        <div class="day-calories">${checkedMeals}/${day.meals.length} · ${dayTotal} cal</div>
+        <div class="day-chevron">▶</div>
+      </div>
+      ${isOpen ? `<div class="meals">${day.meals.map((meal,mi) => {
+        const done = state.mealChecks[`${wk}-${di}-${mi}`];
+        return `<div class="meal-row" onclick="toggleMeal(${di},${mi})">
+          <div class="meal-type">${meal.type}</div>
+          <div class="meal-info">
+            <div class="meal-name">${meal.name}</div>
+            <div class="meal-macros">${meal.cal} cal · ${meal.protein}g protein · ${meal.carbs}g carbs · ${meal.fat}g fat</div>
+          </div>
+          <div class="meal-check${done?' done':''}">${done?'✓':''}</div>
+        </div>`;
+      }).join('')}</div>` : ''}
+    </div>`;
+  }).join('');
+  updateBadges();
+}
+
+function toggleDay(di) {
+  openDay = openDay === di ? null : di;
+  renderDays();
+}
+function toggleDayCheck(di) {
+  const wk = weekKey(state.currentWeekOffset);
+  const key = `${wk}-${di}`;
+  state.dayChecks[key] = !state.dayChecks[key];
+  saveState(); renderDays(); renderMacroBar(); renderGoals();
+}
+function toggleMeal(di, mi) {
+  const wk = weekKey(state.currentWeekOffset);
+  const key = `${wk}-${di}-${mi}`;
+  state.mealChecks[key] = !state.mealChecks[key];
+  saveState(); renderDays(); renderMacroBar(); renderGoals();
+}
+
+// ─── SHOPPING ────────────────────────────────────────────────────
+function renderShopping() {
+  document.getElementById('shopList').innerHTML = SHOPPING.map(cat => `
+    <div class="shop-category">
+      <div class="shop-cat-header">
+        <div class="shop-dot" style="background:${cat.color}"></div>
+        ${cat.category}
+      </div>
+      ${cat.items.map(item => {
+        const checked = state.shopChecks[item.id];
+        return `<div class="shop-item${checked?' checked':''}" onclick="toggleShop('${item.id}')">
+          <div class="shop-cb">${checked?'✓':''}</div>
+          <div class="shop-item-name">${item.name}</div>
+          <div class="shop-item-qty">${item.qty}</div>
+        </div>`;
+      }).join('')}
+    </div>`).join('');
+  const total = SHOPPING.reduce((s,c) => s + c.items.length, 0);
+  const checked = Object.values(state.shopChecks).filter(Boolean).length;
+  document.getElementById('shopBadge').textContent = `${total - checked} left`;
+}
+function toggleShop(id) {
+  state.shopChecks[id] = !state.shopChecks[id];
+  saveState(); renderShopping();
+}
+function clearShopping() {
+  state.shopChecks = {}; saveState(); renderShopping();
+}
+
+// ─── GOALS ───────────────────────────────────────────────────────
+function renderGoals() {
+  const wk = weekKey(state.currentWeekOffset);
+  const todayIdx = state.currentWeekOffset === 0 ? todayDayIndex() : -1;
+  let daysDone = 0, mealsDone = 0, totalMeals = 0;
+  WEEK_PLAN.forEach((day, di) => {
+    if (state.dayChecks[`${wk}-${di}`]) daysDone++;
+    day.meals.forEach((_,mi) => {
+      totalMeals++;
+      if (state.mealChecks[`${wk}-${di}-${mi}`]) mealsDone++;
+    });
+  });
+  const pct = Math.round((daysDone / 7) * 100);
+  const circ = 226.2;
+  document.getElementById('goalRing').style.strokeDashoffset = circ - (circ * pct / 100);
+  document.getElementById('ringPct').textContent = pct + '%';
+  document.getElementById('daysComplete').textContent = `${daysDone} / 7`;
+  document.getElementById('mealsLogged').textContent = mealsDone;
+  document.getElementById('mealsTotal').textContent = `of ${totalMeals} planned`;
+
+  // Week dots
+  const days = ['M','T','W','T','F','S','S'];
+  document.getElementById('weekDots').innerHTML = WEEK_PLAN.map((day,di) => {
+    const done = state.dayChecks[`${wk}-${di}`];
+    const today = di === todayIdx;
+    return `<div class="week-day-dot${done?' done':''}${today?' today':''}">
+      <div class="week-day-label">${days[di]}</div>
+      <div>${done?'✓':'·'}</div>
+    </div>`;
+  }).join('');
+
+  // Cal rows
+  const s = state.settings;
+  document.getElementById('calGoalRows').innerHTML = WEEK_PLAN.map((day, di) => {
+    const consumed = day.meals.reduce((acc, meal, mi) =>
+      acc + (state.mealChecks[`${wk}-${di}-${mi}`] ? meal.cal : 0), 0);
+    const planned = day.meals.reduce((acc, meal) => acc + meal.cal, 0);
+    const pct = Math.min(100, Math.round((consumed / s.cal) * 100));
+    const isToday = di === todayIdx;
+    return `<div style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+        <span style="font-size:13px;color:${isToday?'var(--gold)':'var(--text-mid)'}">${day.day}${isToday?' ·':''}</span>
+        <span style="font-size:12px;color:var(--text-dim)">${consumed} / ${s.cal} cal goal</span>
+      </div>
+      <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:${pct>=100?'var(--green)':'var(--gold)'};border-radius:3px;transition:width 0.4s ease"></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ─── SETTINGS ───────────────────────────────────────────────────
+function renderSettings() {
+  document.getElementById('set-cal').value = state.settings.cal;
+  document.getElementById('set-protein').value = state.settings.protein;
+  document.getElementById('set-carbs').value = state.settings.carbs;
+  document.getElementById('set-fat').value = state.settings.fat;
+}
+function saveSettings() {
+  state.settings = {
+    cal: parseInt(document.getElementById('set-cal').value) || 2000,
+    protein: parseInt(document.getElementById('set-protein').value) || 150,
+    carbs: parseInt(document.getElementById('set-carbs').value) || 200,
+    fat: parseInt(document.getElementById('set-fat').value) || 65,
+  };
+  saveState(); render();
+  document.querySelector('.save-btn').textContent = '✓ Saved';
+  setTimeout(() => document.querySelector('.save-btn').textContent = 'Save Targets', 1500);
+}
+function resetAll() {
+  if (confirm('Reset all tracked data? Meal plans and settings will be preserved.')) {
+    state.mealChecks = {}; state.dayChecks = {}; state.shopChecks = {};
+    saveState(); render();
+  }
+}
+
+// ─── BADGES ─────────────────────────────────────────────────────
+function updateBadges() {
+  const wk = weekKey(state.currentWeekOffset);
+  const done = WEEK_PLAN.filter((_,di) => state.dayChecks[`${wk}-${di}`]).length;
+  document.getElementById('planBadge').textContent = `${done}/7`;
+}
+
+// ─── INIT ────────────────────────────────────────────────────────
+loadState();
+render();
+</script>
+</body>
+</html>

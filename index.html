@@ -116,7 +116,7 @@ body{background:var(--cream);color:var(--ink);font-family:'Barlow',sans-serif;fo
 .opt-card.selected .stp,.opt-card.selected .stp strong{color:var(--rust);}
 .opt-chk{position:absolute;top:12px;right:12px;width:24px;height:24px;border-radius:50%;border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:11px;color:transparent;background:white;transition:all 0.18s;}
 .opt-card.selected .opt-chk{background:var(--rust);border-color:var(--rust);color:white;}
-.opt-fav{position:absolute;bottom:10px;right:12px;font-size:18px;cursor:pointer;padding:4px;z-index:2;opacity:0.35;transition:all 0.15s;background:none;border:none;}
+.opt-fav{position:absolute;top:10px;right:44px;font-size:16px;cursor:pointer;padding:4px;z-index:2;opacity:0.35;transition:all 0.15s;background:none;border:none;}
 .opt-fav.on{opacity:1;}
 .opt-divider{height:1px;background:var(--cream2);margin:0 14px;}
 .opt-ings{padding:8px 14px 10px;display:flex;flex-wrap:wrap;gap:4px;}
@@ -233,6 +233,26 @@ body{background:var(--cream);color:var(--ink);font-family:'Barlow',sans-serif;fo
 .fav-stat strong{color:var(--ink);}
 .fav-rm{background:none;border:none;font-size:18px;cursor:pointer;color:var(--gold);padding:2px;flex-shrink:0;}
 
+/* ── RECIPE SWAP NAV ── */
+.recipe-nav{display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-bottom:1px solid var(--border2);background:var(--cream2);}
+.recipe-nav-btn{background:none;border:1.5px solid var(--border);border-radius:4px;padding:6px 14px;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:600;letter-spacing:0.1em;color:var(--ink3);transition:all 0.15s;display:flex;align-items:center;gap:5px;}
+.recipe-nav-btn:active{background:var(--cream3);}
+.recipe-nav-btn:disabled{opacity:0.25;cursor:default;}
+.recipe-nav-pos{font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:0.2em;color:var(--ink4);text-transform:uppercase;}
+
+/* ── RECIPE NOTES ── */
+.recipe-notes-wrap{padding:14px 16px 0;}
+.recipe-notes-label{font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:0.3em;text-transform:uppercase;color:var(--ink4);margin-bottom:6px;}
+.recipe-notes-input{width:100%;border:1.5px solid var(--border);border-radius:4px;padding:10px 12px;font-family:'Barlow',sans-serif;font-size:13px;color:var(--ink);background:white;resize:none;min-height:64px;line-height:1.5;outline:none;transition:border-color 0.15s;-webkit-appearance:none;}
+.recipe-notes-input:focus{border-color:var(--ink3);}
+.recipe-notes-input::placeholder{color:var(--ink4);}
+.recipe-notes-saved{font-size:10px;color:var(--sage);font-family:'Barlow Condensed',sans-serif;letter-spacing:0.15em;margin-top:4px;height:14px;}
+
+/* ── DAY DIFFICULTY BADGE ── */
+.day-time-flag{font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;padding:2px 6px;border-radius:2px;}
+.day-time-flag.relaxed{background:var(--ochre-lt);color:var(--ochre);}
+.day-time-flag.quick{background:var(--cream3);color:var(--ink4);}
+
 /* ── END OF RECIPES WARNING ── */
 .recipe-end-overlay{position:fixed;inset:0;background:rgba(26,24,20,0.72);z-index:500;display:flex;align-items:flex-end;justify-content:center;padding-bottom:env(safe-area-inset-bottom);}
 .recipe-end-sheet{background:var(--cream);border-radius:12px 12px 0 0;padding:28px 24px 32px;width:100%;max-width:480px;box-shadow:0 -8px 40px rgba(0,0,0,0.25);}
@@ -347,9 +367,7 @@ body{background:var(--cream);color:var(--ink);font-family:'Barlow',sans-serif;fo
           <div class="week-label" id="weekLabel">Next 14 Days</div>
           <div class="week-sublabel" id="weekSublabel">—</div>
         </div>
-        <div class="week-prog-summary" id="weekProgSummary"></div>
       </div>
-      <div class="week-progress" id="weekProgress"></div>
     </div>
     <div id="planBody"></div>
   </div>
@@ -733,6 +751,7 @@ let cooked = {};      // { "2026-03-01": true }
 let saveLater = {};   // { "2026-03-01": true } — meal-level save for later
 let servings = {};    // { "2026-03-01": 2 } — serving multiplier (1,2,3)
 let refreshed = {};   // { "2026-03-01": [4,5,6] } — backup option indices shown
+let notes = {};       // { "2026-03-01": "text" } — per-day recipe notes
 let activeDate = null;
 let viewingRecipe = false;
 let savedSectionOpen = false;
@@ -767,6 +786,7 @@ async function supaLoad() {
       saveLater = r.save_later || {};
       servings  = r.servings   || {};
       refreshed = r.refreshed  || {};
+      notes     = r.notes      || {};
     }
     setSyncStatus('ok');
   } catch(e) {
@@ -793,7 +813,7 @@ async function supaSync() {
       },
       body: JSON.stringify({
         sel, shop_ck: shopCk, cooked, favs, save_later: saveLater,
-        servings, refreshed,
+        servings, refreshed, notes,
         updated_at: new Date().toISOString()
       })
     });
@@ -805,7 +825,7 @@ async function supaSync() {
 }
 
 function save() {
-  localStorage.setItem('dp_v5', JSON.stringify({ sel, shopCk, favs, cooked, saveLater, servings, refreshed }));
+  localStorage.setItem('dp_v5', JSON.stringify({ sel, shopCk, favs, cooked, saveLater, servings, refreshed, notes }));
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => supaSync(), 800);
 }
@@ -815,6 +835,7 @@ function load() {
     const d = JSON.parse(localStorage.getItem('dp_v5') || '{}');
     sel = d.sel||{}; shopCk = d.shopCk||{}; favs = d.favs||{}; cooked = d.cooked||{};
     saveLater = d.saveLater||{}; servings = d.servings||{}; refreshed = d.refreshed||{};
+    notes = d.notes||{};
   } catch(e){}
 }
 
@@ -833,7 +854,8 @@ async function supaSubscribe() {
         saveLater = r.save_later || {};
         servings  = r.servings   || {};
         refreshed = r.refreshed  || {};
-        localStorage.setItem('dp_v5', JSON.stringify({ sel, shopCk, favs, cooked, saveLater, servings, refreshed }));
+        notes     = r.notes      || {};
+        localStorage.setItem('dp_v5', JSON.stringify({ sel, shopCk, favs, cooked, saveLater, servings, refreshed, notes }));
         renderPlan();
         renderGrocery();
         updateMeta();
@@ -891,47 +913,48 @@ function fmt14DayLabel() {
 // ═══════════════════════════════════════════════════════════════
 function renderPlan() {
   const dates = get14Days();
-  const selCount = dates.filter(ds => sel[ds] !== undefined).length;
 
   // Header
   document.getElementById('weekLabel').textContent = 'Next 14 Days';
   document.getElementById('weekSublabel').textContent = fmt14DayLabel();
-  document.getElementById('weekProgSummary').innerHTML = `<span>${selCount}</span> / 14 planned`;
 
-  // Progress dots
-  document.getElementById('weekProgress').innerHTML = dates.map(ds => {
-    const isSel = sel[ds] !== undefined;
-    const isCooked = cooked[ds];
-    const isToday = ds === TODAY;
-    const dot = isCooked ? 'done' : isSel ? 'done' : '';
-    const style = isCooked ? 'background:var(--sage);border-color:var(--sage);' : '';
-    return `<div class="week-prog-dot${dot?' '+dot:''}${isToday?' today':''}" style="${style}" title="${ds}"></div>`;
-  }).join('');
-
-  // Day rows — split into this week / next week sections
+  // Day rows — split by calendar Sunday boundaries
   const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   let html = '';
+  let sectionCount = 0;
+  const sectionLabels = ['This Week', 'Next Week', 'Week After'];
 
   dates.forEach((ds, idx) => {
-    // Insert "Next Week" divider after day 7
-    if (idx === 7) {
-      html += `<div class="week-divider">Next Week</div>`;
+    const d_check = new Date(ds + 'T12:00:00');
+    const isSunday = d_check.getDay() === 0;
+    if (isSunday && idx > 0) {
+      sectionCount++;
+      html += `<div class="week-divider">${sectionLabels[sectionCount] || 'Upcoming'}</div>`;
     } else if (idx === 0) {
       html += `<div style="height:10px;"></div>`;
     }
 
-    const hasMeals = !!MEALS[ds];
+    const allMeals = getMealsForDay(ds);
+    const hasMeals = allMeals.length > 0;
     const isSel = sel[ds] !== undefined;
     const isToday = ds === TODAY;
     const isCooked = cooked[ds];
-    const meal = isSel ? MEALS[ds][sel[ds]] : null;
+    const meal = isSel ? allMeals[sel[ds]] : null;
     const isFav = meal && favs[meal.name];
+    const hasNote = !!(notes[ds] && notes[ds].trim());
     const d = new Date(ds + 'T12:00:00');
     const dayNum = d.getDate();
     const dayName = DAYS[d.getDay()];
     const monthName = d.toLocaleDateString('en-US', {month:'short'});
     const timeStr = meal ? (meal.time >= 120 ? `${Math.round(meal.time/60)}h` : `${meal.time}m`) : '';
     const diffLbl = meal ? ['Easy','Easy','Medium','Medium','Hard','Hard'][meal.diff] : '';
+
+    // Smart time flag — Thu/Fri/Sat/Sun = relaxed (longer cooks ok), Mon–Wed = weeknight
+    const dow = d.getDay(); // 0=Sun,1=Mon,2=Tue,3=Wed,4=Thu,5=Fri,6=Sat
+    const isRelaxedNight = dow === 0 || dow === 4 || dow === 5 || dow === 6; // Sun,Thu,Fri,Sat
+    const timeFlagHtml = !isSel ? (isRelaxedNight
+      ? `<span class="day-time-flag relaxed">Leisurely OK</span>`
+      : `<span class="day-time-flag quick">Under 1h</span>`) : '';
 
     html += `<div class="day-row${isSel?' selected':''}${isToday?' today-row':''}${isCooked?' cooked-row':''}"
       id="dayrow-${ds}"
@@ -945,7 +968,7 @@ function renderPlan() {
       <div class="day-content">
         ${isCooked
           ? `<div class="day-meal-name" style="text-decoration:line-through;opacity:0.5;">${meal.name}</div>
-             <div class="day-meal-meta"><span class="day-meta-pill" style="color:var(--sage)">✓ Cooked</span></div>`
+             <div class="day-meal-meta"><span class="day-meta-pill" style="color:var(--sage)">✓ Cooked</span>${hasNote ? `<span class="day-meta-pill" style="color:var(--ink4)">📝</span>` : ''}</div>`
           : isSel
             ? `<div class="day-meal-name">${meal.name}</div>
                <div class="day-meal-meta">
@@ -953,9 +976,10 @@ function renderPlan() {
                  <span class="day-meta-pill">${meal.cal} cal</span>
                  <span class="day-meta-pill">${timeStr}</span>
                  <span class="day-meta-pill">${diffLbl}</span>
+                 ${hasNote ? `<span class="day-meta-pill" style="color:var(--ink4)">📝</span>` : ''}
                </div>`
             : hasMeals
-              ? `<div class="day-empty-label">Tap to choose dinner</div>`
+              ? `<div class="day-empty-label">Tap to choose dinner</div><div>${timeFlagHtml}</div>`
               : `<div class="day-empty-label" style="opacity:0.4;">No options available</div>`
         }
       </div>
@@ -1089,8 +1113,15 @@ function renderOptionsView(ds) {
   const curSel = sel[ds];
   const body = document.getElementById('slideBody');
 
+  const d = new Date(ds + 'T12:00:00');
+  const dow = d.getDay();
+  const isRelaxedNight = dow === 0 || dow === 4 || dow === 5 || dow === 6;
+  const smartLabel = isRelaxedNight
+    ? `<span class="day-time-flag relaxed" style="margin-left:8px;">Leisurely OK</span>`
+    : `<span class="day-time-flag quick" style="margin-left:8px;">Weeknight — under 1h ideal</span>`;
+
   let html = `<div class="opts-wrap">
-    <div class="opts-hdr">Choose your dinner</div>
+    <div class="opts-hdr" style="display:flex;align-items:center;">Choose your dinner${smartLabel}</div>
     <button class="opts-refresh-btn" onclick="refreshOptions('${ds}')">
       <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M12 7A5 5 0 112 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M12 3v4h-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
       Refresh Options
@@ -1104,12 +1135,14 @@ function renderOptionsView(ds) {
     const isFav = !!favs[m.name];
     const isBackup = i >= baseMealCount;
     const labelNum = isBackup ? `Backup ${i - baseMealCount + 1}` : `Option ${i+1}`;
+    const isWeeknight = !isRelaxedNight && m.time <= 60;
+    const weeknightBadge = !isRelaxedNight && m.time <= 60 ? `<span style="font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;background:var(--sage);color:white;padding:2px 6px;border-radius:2px;margin-left:6px;">Quick</span>` : '';
 
     html += `<div class="opt-card${isSel?' selected':''}" id="optcard-${i}" onclick="selectMeal(${i})">
       <div class="opt-chk">${isSel?'✓':''}</div>
       <button class="opt-fav${isFav?' on':''}" onclick="event.stopPropagation();toggleFav('${ds}',${i},'${m.name.replace(/'/g,"\\'")}')">${isFav?'★':'☆'}</button>
       <div class="opt-top">
-        <div class="opt-num">${m.cuisine} · ${labelNum}</div>
+        <div class="opt-num">${m.cuisine} · ${labelNum}${weeknightBadge}</div>
         <div class="opt-name">${m.name}</div>
         ${m.note ? `<div style="font-size:10px;color:${m.note.startsWith('⚠️')?'var(--ochre)':'var(--ink4)'};margin-bottom:5px;line-height:1.4;">${m.note}</div>` : ''}
         <div class="opt-stats">
@@ -1365,7 +1398,25 @@ async function renderRecipeView(ds, mi) {
       </div>
     </div>`).join('');
 
-  body.innerHTML = `<div class="recipe-wrap">
+  const allMealsForDay = getMealsForDay(ds);
+  const totalOptions = allMealsForDay.length;
+  const prevMi = mi > 0 ? mi - 1 : null;
+  const nextMi = mi < totalOptions - 1 ? mi + 1 : null;
+
+  body.innerHTML = `<div class="recipe-wrap" id="recipeWrap"
+    data-ds="${ds}" data-mi="${mi}"
+    data-touch-start-x="">
+
+    <div class="recipe-nav">
+      <button class="recipe-nav-btn" onclick="swapRecipe('${ds}',${prevMi})" ${prevMi===null?'disabled':''}>
+        ‹ Prev
+      </button>
+      <span class="recipe-nav-pos">${mi + 1} of ${totalOptions}</span>
+      <button class="recipe-nav-btn" onclick="swapRecipe('${ds}',${nextMi})" ${nextMi===null?'disabled':''}>
+        Next ›
+      </button>
+    </div>
+
     <div class="recipe-hero">
       <div class="recipe-eyebrow">${meal.cuisine}</div>
       <div class="recipe-title">${meal.name}</div>
@@ -1396,7 +1447,7 @@ async function renderRecipeView(ds, mi) {
     <div class="recipe-actions">
       <button class="recipe-action-btn${cooked[ds]?' cooked':''}" id="cookedBtn" onclick="toggleCooked('${ds}')">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M4 7l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        ${cooked[ds] ? 'Unmark Cooked' : 'Mark as Cooked'}
+        ${cooked[ds] ? 'Unmark' : 'Mark Cooked'}
       </button>
       <button class="recipe-action-btn remove" onclick="removeRecipe('${ds}')">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
@@ -1412,9 +1463,26 @@ async function renderRecipeView(ds, mi) {
       <div class="recipe-sec-title">Instructions</div>
       <div id="stepsContainer">${cached ? stepsHtmlFromCache(cached) : skeletonHtml}</div>
     </div>
-    <button class="change-opts-btn" onclick="showOptions()">↺ View other options for today</button>
-    <div style="height:24px;"></div>
+
+    <div class="recipe-notes-wrap">
+      <div class="recipe-notes-label">Notes</div>
+      <textarea class="recipe-notes-input" id="recipeNotes" placeholder="How'd it go? Substitutions, tweaks, Whitney's verdict…" oninput="saveNote('${ds}',this.value)">${notes[ds] || ''}</textarea>
+      <div class="recipe-notes-saved" id="notesSaved"></div>
+    </div>
+
+    <div style="height:32px;"></div>
   </div>`;
+
+  // Swipe gesture support
+  const wrap = document.getElementById('recipeWrap');
+  let touchStartX = 0;
+  wrap.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; }, { passive: true });
+  wrap.addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    if (Math.abs(dx) < 50) return; // too short
+    if (dx < 0 && nextMi !== null) swapRecipe(ds, nextMi);   // swipe left = next
+    if (dx > 0 && prevMi !== null) swapRecipe(ds, prevMi);   // swipe right = prev
+  }, { passive: true });
 
   if (!cached) {
     try {
@@ -1468,19 +1536,42 @@ function showOptions() {
   renderSlideBody();
 }
 
+function swapRecipe(ds, mi) {
+  if (mi === null || mi === undefined) return;
+  sel[ds] = mi;
+  save();
+  renderRecipeView(ds, mi);
+  // Scroll back to top of slide body
+  const body = document.getElementById('slideBody');
+  if (body) body.scrollTop = 0;
+}
+
+let noteTimer = null;
+function saveNote(ds, text) {
+  notes[ds] = text;
+  clearTimeout(noteTimer);
+  noteTimer = setTimeout(() => {
+    save();
+    const el = document.getElementById('notesSaved');
+    if (el) {
+      el.textContent = 'Saved';
+      setTimeout(() => { if (el) el.textContent = ''; }, 1500);
+    }
+  }, 600);
+}
+
 function toggleCooked(ds) {
   cooked[ds] = !cooked[ds];
   save();
-  // Update button in recipe view immediately
   const btn = document.getElementById('cookedBtn');
   if (btn) {
     btn.classList.toggle('cooked', cooked[ds]);
-    btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M4 7l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg> ${cooked[ds] ? 'Unmark Cooked' : 'Mark as Cooked'}`;
+    btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M4 7l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg> ${cooked[ds] ? 'Unmark' : 'Mark Cooked'}`;
   }
-  // Grocery list removes ingredients of cooked meals
+  // Cooked meals are fully removed from grocery list (already bought & made)
   renderGrocery();
-  // Update plan row in background
   renderPlan();
+  updateMeta();
 }
 
 function removeRecipe(ds) {
@@ -1489,6 +1580,7 @@ function removeRecipe(ds) {
   delete servings[ds];
   delete saveLater[ds];
   delete refreshed[ds];
+  delete notes[ds];
   save();
   closeSlide();
   renderGrocery();
@@ -1635,10 +1727,9 @@ function renderGrocery() {
     const isSaved = !!saveLater[ds];
     const sv = servings[ds] || 1;
     return `<div class="meal-save-row">
-      <div class="meal-save-cb${isSaved?' on':''}" onclick="toggleMealSaveLater('${ds}')">${isSaved?'\u2713':''}</div>
       <span class="meal-save-date">${label}</span>
       <span class="meal-save-name">${short}${sv>1?` <span style="color:var(--rust);font-size:10px;">\xd7${sv}</span>`:''}</span>
-      ${isSaved ? '<span class="meal-save-label">\u2192 shop later</span>' : ''}
+      <div class="meal-save-cb${isSaved?' on':''}" onclick="toggleMealSaveLater('${ds}')" title="${isSaved?'Move back to list':'Save for later'}">${isSaved?'\u2713':''}</div>
     </div>`;
   }).join('');
 
@@ -1680,7 +1771,11 @@ function renderGrocery() {
     cols = `<div style="padding:24px 16px;font-size:13px;color:var(--ink4);font-style:italic;">All meals saved for later. Uncheck a meal above to show its ingredients.</div>`;
   }
 
-  body.innerHTML = `<div class="meal-chips" style="padding:10px 16px;">${mealChipsHtml}</div>${cols}<div style="height:40px;"></div>`;
+  const chipHeader = `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 16px 4px;border-bottom:1px solid var(--border2);margin-bottom:0;">
+    <span style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:0.25em;text-transform:uppercase;color:var(--ink4);">Meal</span>
+    <span style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:0.25em;text-transform:uppercase;color:var(--ink4);">Save for Later</span>
+  </div>`;
+  body.innerHTML = chipHeader + `<div class="meal-chips" style="padding:4px 16px 8px;">${mealChipsHtml}</div>${cols}<div style="height:40px;"></div>`;
 }
 
 function toggleMealSaveLater(ds) {
@@ -1694,8 +1789,44 @@ function clearChecked() { shopCk = {}; save(); renderGrocery(); }
 function clearAllMeals() {
   if (!Object.keys(sel).length) return;
   if (confirm('Clear all meal selections?')) {
-    sel = {}; shopCk = {}; cooked = {}; saveLater = {}; servings = {}; refreshed = {};
+    sel = {}; shopCk = {}; cooked = {}; saveLater = {}; servings = {}; refreshed = {}; notes = {};
     save(); renderPlan(); renderGrocery(); updateMeta();
+  }
+}
+
+function shareRecipe(ds, mi) {
+  const allMeals = getMealsForDay(ds);
+  const meal = allMeals[mi];
+  if (!meal) return;
+  const sv = servings[ds] || 1;
+  const serves = sv * 2;
+  const d = new Date(ds + 'T12:00:00');
+  const dateLabel = d.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
+
+  const ingList = meal.ingredients
+    .map(ing => `  • ${ing.n} — ${multiplyQty(ing.q, sv)}`)
+    .join('\n');
+
+  const steps = RECIPE_STEPS[meal.name] || recipeCache[meal.name];
+  const stepList = steps
+    ? steps.map((s, i) => `  ${i+1}. ${s.title}: ${s.text}`).join('\n')
+    : '  (Steps available in the app)';
+
+  const text = `🍽 ${meal.name}
+${dateLabel} · Serves ${serves} · ${meal.cal} cal/person · ${meal.time} min
+
+INGREDIENTS
+${ingList}
+
+INSTRUCTIONS
+${stepList}
+
+— via blibbyeats.netlify.app`;
+
+  if (navigator.share) {
+    navigator.share({ title: meal.name, text }).catch(() => copyToClipboard(text));
+  } else {
+    copyToClipboard(text);
   }
 }
 
@@ -1761,22 +1892,6 @@ function updateMeta() {
   if (n > 0) parts.push(`<span>${n}</span> planned`);
   if (f > 0) parts.push(`<span>${f}</span> ★`);
   meta.innerHTML = parts.length ? parts.join(' &nbsp;·&nbsp; ') : 'No meals selected';
-
-  // Update progress summary
-  const ps = document.getElementById('weekProgSummary');
-  if (ps) ps.innerHTML = `<span>${n}</span> / 14 planned`;
-
-  // Update progress dots
-  const prog = document.getElementById('weekProgress');
-  if (prog) {
-    prog.innerHTML = dates.map(ds => {
-      const isSel = sel[ds] !== undefined;
-      const isCooked = cooked[ds];
-      const isToday = ds === TODAY;
-      const style = isCooked ? 'background:var(--sage);border-color:var(--sage);' : '';
-      return `<div class="week-prog-dot${isSel?' done':''}${isToday?' today':''}" style="${style}"></div>`;
-    }).join('');
-  }
 }
 
 // ═══════════════════════════════════════════════════════════════

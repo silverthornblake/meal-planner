@@ -334,6 +334,21 @@ body{background:var(--cream);color:var(--ink);font-family:'Barlow',sans-serif;fo
 .history-card-meta{display:flex;gap:10px;}
 .history-card-stat{font-family:'Barlow Condensed',sans-serif;font-size:11px;color:var(--ink3);}
 .history-card-note{padding:0 14px 12px;font-size:12px;color:var(--ink3);font-style:italic;line-height:1.5;border-top:1px solid var(--border2);padding-top:10px;}
+.history-card-action{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-top:1px solid var(--border2);background:var(--cream2);}
+.history-card-btn{background:var(--rust);color:white;border:none;padding:7px 14px;border-radius:3px;cursor:pointer;font-family:'Barlow',sans-serif;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;}
+
+/* ── ASSIGN TO DAY SHEET ── */
+.assign-overlay{position:fixed;inset:0;background:rgba(26,24,20,0.7);z-index:400;display:flex;align-items:flex-end;justify-content:center;}
+.assign-sheet{background:var(--cream);border-radius:12px 12px 0 0;padding:24px 20px 32px;width:100%;max-width:480px;max-height:80vh;overflow-y:auto;}
+.assign-title{font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink);margin-bottom:4px;}
+.assign-sub{font-size:12px;color:var(--ink4);margin-bottom:16px;}
+.assign-day-list{display:flex;flex-direction:column;gap:6px;margin-bottom:16px;}
+.assign-day-btn{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border:1.5px solid var(--border);border-radius:4px;background:white;cursor:pointer;text-align:left;transition:all 0.15s;}
+.assign-day-btn:active{background:var(--cream2);}
+.assign-day-btn.taken{opacity:0.45;cursor:not-allowed;border-style:dashed;}
+.assign-day-date{font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:600;color:var(--rust);letter-spacing:0.05em;}
+.assign-day-status{font-size:11px;color:var(--ink4);font-style:italic;}
+.assign-cancel{width:100%;background:none;border:1.5px solid var(--border);padding:11px;border-radius:4px;cursor:pointer;font-family:'Barlow',sans-serif;font-size:12px;color:var(--ink3);letter-spacing:0.08em;text-transform:uppercase;}
 
 /* streak */
 .streak-display{display:flex;align-items:center;gap:16px;background:white;border:1.5px solid var(--border);border-radius:6px;padding:16px;}
@@ -400,6 +415,15 @@ body{background:var(--cream);color:var(--ink);font-family:'Barlow',sans-serif;fo
       <div class="stats-sub" id="statsSub">Based on all planned meals</div>
     </div>
     <div class="stats-body" id="statsBody"></div>
+  </div>
+</div>
+
+<div id="assignOverlay" class="assign-overlay" style="display:none;" onclick="closeAssignSheet(event)">
+  <div class="assign-sheet" id="assignSheet">
+    <div class="assign-title" id="assignTitle">Cook Again</div>
+    <div class="assign-sub" id="assignSub">Choose a day to add this to your plan</div>
+    <div class="assign-day-list" id="assignDayList"></div>
+    <button class="assign-cancel" onclick="closeAssignSheet()">Cancel</button>
   </div>
 </div>
 
@@ -2116,7 +2140,7 @@ function renderStats() {
           const timeStr = meal.time >= 120 ? `${Math.round(meal.time/60)}h ${meal.time%60>0?meal.time%60+'m':''}`.trim() : `${meal.time} min`;
           const note = notes[ds] ? notes[ds].trim() : '';
           return `<div class="history-card">
-            <div class="history-card-top">
+            <div class="history-card-top" onclick="openHistoryRecipe('${ds}')">
               <div class="history-card-body">
                 <div class="history-card-date">${dateLabel}</div>
                 <div class="history-card-name">${meal.name}</div>
@@ -2126,8 +2150,13 @@ function renderStats() {
                   <span class="history-card-stat">${timeStr}</span>
                 </div>
               </div>
+              <div style="color:var(--ink4);font-size:18px;align-self:center;">›</div>
             </div>
             ${note ? `<div class="history-card-note">📝 ${note}</div>` : ''}
+            <div class="history-card-action">
+              <span style="font-size:11px;color:var(--ink4);font-family:'Barlow Condensed',sans-serif;letter-spacing:0.1em;">Tap card to view recipe</span>
+              <button class="history-card-btn" onclick="openAssignSheet('${ds}')">Cook Again</button>
+            </div>
           </div>`;
         }).join('')}
       </div>
@@ -2143,6 +2172,107 @@ function toggleHistorySection() {
   const chev = document.getElementById('historyChevron');
   if (list) list.style.display = window._historyOpen ? '' : 'none';
   if (chev) chev.className = `history-toggle-chevron${window._historyOpen?' open':''}`;
+}
+
+// Open the slide panel to show a cooked recipe from history
+function openHistoryRecipe(ds) {
+  activeDate = ds;
+  viewingRecipe = true;
+  const d = new Date(ds + 'T12:00:00');
+  document.getElementById('slideDate').textContent =
+    'Cooked · ' + d.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
+  renderRecipeView(ds, sel[ds]);
+  document.getElementById('slidePanel').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+// Open the assign-to-day bottom sheet for a meal from history
+function openAssignSheet(fromDs) {
+  const allMeals = getMealsForDay(fromDs);
+  const meal = allMeals[sel[fromDs]];
+  if (!meal) return;
+
+  document.getElementById('assignTitle').textContent = meal.name.length > 32 ? meal.name.slice(0,30)+'…' : meal.name;
+  document.getElementById('assignSub').textContent = 'Pick an upcoming day to add this to your plan';
+
+  // Show next 28 days as options
+  const today = new Date(); today.setHours(0,0,0,0);
+  const days = Array.from({length: 28}, (_, i) => {
+    const d = new Date(today);
+    d.setDate(d.getDate() + i);
+    return d.toISOString().slice(0,10);
+  });
+
+  const listEl = document.getElementById('assignDayList');
+  listEl.innerHTML = days.map(ds => {
+    const d = new Date(ds + 'T12:00:00');
+    const label = d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+    const hasSel = sel[ds] !== undefined;
+    const existingMeals = getMealsForDay(ds);
+    const existing = hasSel ? existingMeals[sel[ds]]?.name : null;
+    const statusText = hasSel ? `Replaces: ${existing ? (existing.length > 24 ? existing.slice(0,22)+'…' : existing) : 'current meal'}` : 'Open';
+
+    return `<button class="assign-day-btn${hasSel?' taken':''}"
+      onclick="assignMealToDay('${fromDs}','${ds}')">
+      <div>
+        <div class="assign-day-date">${label}</div>
+        <div class="assign-day-status">${statusText}</div>
+      </div>
+      <div style="color:var(--rust);font-size:16px;">${hasSel ? '↺' : '+'}</div>
+    </button>`;
+  }).join('');
+
+  document.getElementById('assignOverlay').style.display = 'flex';
+}
+
+function closeAssignSheet(event) {
+  if (event && event.target !== document.getElementById('assignOverlay')) return;
+  document.getElementById('assignOverlay').style.display = 'none';
+}
+
+function assignMealToDay(fromDs, toDs) {
+  const sourceMeals = getMealsForDay(fromDs);
+  const meal = sourceMeals[sel[fromDs]];
+  if (!meal) return;
+
+  const targetMeals = getMealsForDay(toDs);
+
+  // Check if meal already exists naturally in target day
+  let targetIdx = targetMeals.findIndex(m => m.name === meal.name);
+
+  if (targetIdx === -1) {
+    // Check if it's in BACKUP_MEALS
+    const backupIdx = BACKUP_MEALS.findIndex(b => b.name === meal.name);
+    if (backupIdx !== -1) {
+      const current = refreshed[toDs] || [];
+      if (!current.includes(backupIdx)) refreshed[toDs] = [...current, backupIdx];
+      const updated = getMealsForDay(toDs);
+      targetIdx = updated.findIndex(m => m.name === meal.name);
+    } else {
+      // Meal is from the MEALS rotation — just pick the same index from the target day
+      // so it points to whatever option occupies that slot (acceptable fallback)
+      targetIdx = Math.min(sel[fromDs], targetMeals.length - 1);
+    }
+  }
+
+  sel[toDs] = Math.max(0, targetIdx);
+  save();
+  document.getElementById('assignOverlay').style.display = 'none';
+
+  // Switch to Plan tab so user sees it land
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.btab').forEach(b => b.classList.remove('active'));
+  document.getElementById('panel-plan').classList.add('active');
+  document.querySelector('.btab').classList.add('active');
+  renderPlan();
+  renderGrocery();
+  updateMeta();
+
+  // Scroll the assigned day row into view
+  setTimeout(() => {
+    const row = document.getElementById(`dayrow-${toDs}`);
+    if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 150);
 }
 // ═══════════════════════════════════════════════════════════════
 // INIT

@@ -1085,13 +1085,13 @@ const MEAL_DATES = Object.keys(MEALS).sort(); // sorted array of all 61 dates
 const CYCLE_ORIGIN = new Date('2026-03-01T12:00:00'); // anchor date
 
 function getCyclicMealDate(ds) {
+  // If this exact date exists in MEALS, use it directly — no cycling needed
+  if (MEALS[ds]) return ds;
+  // Otherwise map forward dates to the recipe pool by cycling
   const d = new Date(ds + 'T12:00:00');
   const dayOffset = Math.round((d - CYCLE_ORIGIN) / (1000 * 60 * 60 * 24));
-  // Cycle through MEAL_DATES, but use a shuffled order so each cycle feels different
-  // Shuffle deterministically using a seed based on which cycle we're on
   const cycle = Math.floor(dayOffset / MEAL_DATES.length);
   const posInCycle = ((dayOffset % MEAL_DATES.length) + MEAL_DATES.length) % MEAL_DATES.length;
-  // Rotate the date list by cycle number so each 61-day period uses a different order
   const rotated = [...MEAL_DATES.slice(cycle % MEAL_DATES.length), ...MEAL_DATES.slice(0, cycle % MEAL_DATES.length)];
   return rotated[posInCycle];
 }
@@ -1353,7 +1353,12 @@ function multiplyQty(q, mult) {
 async function renderRecipeView(ds, mi) {
   const allMeals = getMealsForDay(ds);
   const meal = allMeals[mi];
-  if (!meal) { showOptions(); return; }
+  if (!meal) {
+    // Don't call showOptions() if we're viewing from history — just show an error
+    const body = document.getElementById('slideBody');
+    if (body) body.innerHTML = `<div style="padding:24px 16px;font-size:13px;color:var(--ink3);">Couldn't load this recipe. Try closing and tapping it again.</div>`;
+    return;
+  }
 
   const sv = servings[ds] || 1; // current multiplier
   const body = document.getElementById('slideBody');
@@ -2146,14 +2151,21 @@ function toggleHistorySection() {
 
 // Open the slide panel to show a cooked recipe from history
 function openHistoryRecipe(ds) {
+  const mi = sel[ds];
+  const allMeals = getMealsForDay(ds);
+  const meal = allMeals[mi];
+  if (!meal) {
+    console.warn('History recipe not found for', ds, 'index', mi);
+    return;
+  }
   activeDate = ds;
   viewingRecipe = true;
   const d = new Date(ds + 'T12:00:00');
   document.getElementById('slideDate').textContent =
     'Cooked · ' + d.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
-  renderRecipeView(ds, sel[ds]);
   document.getElementById('slidePanel').classList.add('open');
   document.body.style.overflow = 'hidden';
+  renderRecipeView(ds, mi);
 }
 
 // Open the assign-to-day bottom sheet for a meal from history

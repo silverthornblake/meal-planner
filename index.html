@@ -233,7 +233,27 @@ body{background:var(--cream);color:var(--ink);font-family:'Barlow',sans-serif;fo
 .fav-stat strong{color:var(--ink);}
 .fav-rm{background:none;border:none;font-size:18px;cursor:pointer;color:var(--gold);padding:2px;flex-shrink:0;}
 
-/* ── RECIPE ACTIONS ── */
+/* ── SERVING MULTIPLIER ── */
+.serving-row{display:flex;align-items:center;gap:0;padding:12px 16px;border-bottom:1px solid var(--border2);}
+.serving-label{font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;color:var(--ink4);flex:1;}
+.serving-btns{display:flex;gap:6px;}
+.serving-btn{background:none;border:1.5px solid var(--border);border-radius:4px;color:var(--ink3);font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:700;letter-spacing:0.1em;padding:5px 13px;cursor:pointer;transition:all 0.15s;}
+.serving-btn.active{background:var(--rust);border-color:var(--rust);color:white;}
+.serving-btn:active{transform:scale(0.95);}
+
+/* ── REFRESH BUTTON ── */
+.opts-refresh-btn{display:flex;align-items:center;justify-content:center;gap:8px;margin:0 0 12px;width:100%;background:none;border:1.5px dashed var(--border);border-radius:4px;padding:10px;cursor:pointer;font-family:'Barlow',sans-serif;font-size:12px;color:var(--ink4);letter-spacing:0.08em;transition:all 0.15s;}
+.opts-refresh-btn:active{background:var(--cream2);color:var(--ink);}
+.opts-refresh-btn svg{flex-shrink:0;}
+
+/* ── MEAL-LEVEL SAVE FOR LATER (grocery) ── */
+.meal-save-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border2);}
+.meal-save-row:last-child{border-bottom:none;}
+.meal-save-cb{width:18px;height:18px;flex-shrink:0;border:1.5px solid var(--border);border-radius:3px;background:white;display:flex;align-items:center;justify-content:center;font-size:10px;color:transparent;cursor:pointer;transition:all 0.15s;}
+.meal-save-cb.on{background:var(--ochre);border-color:var(--ochre);color:white;}
+.meal-save-date{font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:0.2em;color:var(--rust);text-transform:uppercase;min-width:48px;}
+.meal-save-name{font-size:12px;color:var(--ink3);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.meal-save-label{font-family:'Barlow Condensed',sans-serif;font-size:9px;letter-spacing:0.15em;text-transform:uppercase;color:var(--ink4);}
 .recipe-actions{display:flex;gap:10px;padding:14px 16px 0;margin-top:4px;}
 .recipe-action-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;padding:11px 12px;border-radius:4px;cursor:pointer;font-family:'Barlow',sans-serif;font-size:12px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;border:1.5px solid var(--border);background:white;color:var(--ink3);transition:all 0.15s;}
 .recipe-action-btn:active{transform:scale(0.97);}
@@ -687,7 +707,9 @@ let sel = {};         // { "2026-03-01": 0 }
 let shopCk = {};      // { "Cat|||Name": true }
 let favs = {};        // { "mealName": { ...meal, savedAt } }
 let cooked = {};      // { "2026-03-01": true }
-let saveLater = {};   // { "Cat|||Name": true }
+let saveLater = {};   // { "2026-03-01": true } — meal-level save for later
+let servings = {};    // { "2026-03-01": 2 } — serving multiplier (1,2,3)
+let refreshed = {};   // { "2026-03-01": [4,5,6] } — backup option indices shown
 let activeDate = null;
 let viewingRecipe = false;
 let savedSectionOpen = false;
@@ -715,27 +737,27 @@ async function supaLoad() {
     const rows = await res.json();
     if (rows.length) {
       const r = rows[0];
-      sel      = r.sel       || {};
-      shopCk   = r.shop_ck   || {};
-      cooked   = r.cooked    || {};
-      favs     = r.favs      || {};
-      saveLater= r.save_later|| {};
+      sel       = r.sel        || {};
+      shopCk    = r.shop_ck    || {};
+      cooked    = r.cooked     || {};
+      favs      = r.favs       || {};
+      saveLater = r.save_later || {};
+      servings  = r.servings   || {};
+      refreshed = r.refreshed  || {};
     }
     setSyncStatus('ok');
   } catch(e) {
-    // Fall back to localStorage
     try {
       const d = JSON.parse(localStorage.getItem('dp_v5') || '{}');
-      sel = d.sel||{}; shopCk = d.shopCk||{}; favs = d.favs||{}; cooked = d.cooked||{}; saveLater = d.saveLater||{};
+      sel = d.sel||{}; shopCk = d.shopCk||{}; favs = d.favs||{}; cooked = d.cooked||{};
+      saveLater = d.saveLater||{}; servings = d.servings||{}; refreshed = d.refreshed||{};
     } catch(_){}
     setSyncStatus('error');
   }
 }
 
 async function supaSync() {
-  // Also always write to localStorage as offline backup
-  localStorage.setItem('dp_v5', JSON.stringify({ sel, shopCk, favs, cooked, saveLater }));
-
+  localStorage.setItem('dp_v5', JSON.stringify({ sel, shopCk, favs, cooked, saveLater, servings, refreshed }));
   setSyncStatus('syncing');
   try {
     const res = await fetch(`${SUPA_URL}/rest/v1/planner_state?id=eq.shared`, {
@@ -748,6 +770,7 @@ async function supaSync() {
       },
       body: JSON.stringify({
         sel, shop_ck: shopCk, cooked, favs, save_later: saveLater,
+        servings, refreshed,
         updated_at: new Date().toISOString()
       })
     });
@@ -758,9 +781,8 @@ async function supaSync() {
   }
 }
 
-// Debounce saves so rapid taps don't hammer the API
 function save() {
-  localStorage.setItem('dp_v5', JSON.stringify({ sel, shopCk, favs, cooked, saveLater }));
+  localStorage.setItem('dp_v5', JSON.stringify({ sel, shopCk, favs, cooked, saveLater, servings, refreshed }));
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => supaSync(), 800);
 }
@@ -768,7 +790,8 @@ function save() {
 function load() {
   try {
     const d = JSON.parse(localStorage.getItem('dp_v5') || '{}');
-    sel = d.sel||{}; shopCk = d.shopCk||{}; favs = d.favs||{}; cooked = d.cooked||{}; saveLater = d.saveLater||{};
+    sel = d.sel||{}; shopCk = d.shopCk||{}; favs = d.favs||{}; cooked = d.cooked||{};
+    saveLater = d.saveLater||{}; servings = d.servings||{}; refreshed = d.refreshed||{};
   } catch(e){}
 }
 
@@ -785,7 +808,9 @@ async function supaSubscribe() {
         cooked    = r.cooked     || {};
         favs      = r.favs       || {};
         saveLater = r.save_later || {};
-        localStorage.setItem('dp_v5', JSON.stringify({ sel, shopCk, favs, cooked, saveLater }));
+        servings  = r.servings   || {};
+        refreshed = r.refreshed  || {};
+        localStorage.setItem('dp_v5', JSON.stringify({ sel, shopCk, favs, cooked, saveLater, servings, refreshed }));
         renderPlan();
         renderGrocery();
         updateMeta();
@@ -944,24 +969,75 @@ function renderSlideBody() {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════
+// BACKUP MEAL BANK — 12 evergreen recipes shown on refresh
+// ═══════════════════════════════════════════════════════════════
+const BACKUP_MEALS = [
+  {name:"Cast Iron Steak with Garlic Herb Butter",cuisine:"American",cal:720,protein:60,time:25,diff:3,ingredients:[{n:"NY strip or ribeye steak",q:"1.5 lbs",c:"Meat"},{n:"Butter",q:"4 tbsp",c:"Dairy"},{n:"Garlic",q:"4 cloves",c:"Produce"},{n:"Fresh thyme",q:"4 sprigs",c:"Produce"},{n:"Fresh rosemary",q:"2 sprigs",c:"Produce"},{n:"Asparagus",q:"1 bunch",c:"Produce"}]},
+  {name:"Lemon Herb Roasted Chicken Thighs",cuisine:"Classic",cal:520,protein:52,time:40,diff:1,ingredients:[{n:"Chicken thighs, bone-in skin-on",q:"4",c:"Meat"},{n:"Lemon",q:"2",c:"Produce"},{n:"Garlic",q:"5 cloves",c:"Produce"},{n:"Fresh thyme",q:"6 sprigs",c:"Produce"},{n:"Olive oil",q:"3 tbsp",c:"Pantry"},{n:"Yukon gold potatoes",q:"1 lb",c:"Produce"}]},
+  {name:"Garlic Butter Shrimp with Orzo",cuisine:"Mediterranean",cal:490,protein:40,time:25,diff:1,ingredients:[{n:"Jumbo shrimp, peeled",q:"1 lb",c:"Seafood"},{n:"Orzo pasta",q:"1 cup dry",c:"Grains"},{n:"Butter",q:"4 tbsp",c:"Dairy"},{n:"Garlic",q:"5 cloves",c:"Produce"},{n:"Lemon",q:"2",c:"Produce"},{n:"Fresh parsley",q:"¼ cup",c:"Produce"},{n:"Cherry tomatoes",q:"1 cup",c:"Produce"}]},
+  {name:"Pork Chops with Apple Cider Pan Sauce",cuisine:"American",cal:560,protein:50,time:30,diff:2,ingredients:[{n:"Thick-cut pork chops",q:"2",c:"Meat"},{n:"Apple cider",q:"½ cup",c:"Pantry"},{n:"Chicken stock",q:"¼ cup",c:"Pantry"},{n:"Shallots",q:"2",c:"Produce"},{n:"Fresh thyme",q:"3 sprigs",c:"Produce"},{n:"Butter",q:"2 tbsp",c:"Dairy"},{n:"Dijon mustard",q:"1 tbsp",c:"Pantry"}]},
+  {name:"Salmon Fried Rice with Ginger & Scallion",cuisine:"Asian Fusion",cal:580,protein:48,time:25,diff:2,ingredients:[{n:"Salmon fillet",q:"1 lb",c:"Seafood"},{n:"Day-old jasmine rice",q:"2 cups",c:"Grains"},{n:"Eggs",q:"2",c:"Dairy"},{n:"Scallions",q:"5",c:"Produce"},{n:"Fresh ginger",q:"1-inch knob",c:"Produce"},{n:"Soy sauce",q:"3 tbsp",c:"Pantry"},{n:"Sesame oil",q:"2 tbsp",c:"Pantry"},{n:"Garlic",q:"3 cloves",c:"Produce"}]},
+  {name:"Beef Tacos with Pico de Gallo",cuisine:"Mexican",cal:580,protein:46,time:25,diff:1,ingredients:[{n:"Ground beef (80/20)",q:"1 lb",c:"Meat"},{n:"Corn tortillas",q:"8",c:"Pantry"},{n:"Roma tomatoes",q:"3",c:"Produce"},{n:"White onion",q:"½",c:"Produce"},{n:"Jalapeño",q:"1",c:"Produce"},{n:"Fresh cilantro",q:"¼ cup",c:"Produce"},{n:"Lime",q:"2",c:"Produce"},{n:"Taco seasoning",q:"2 tbsp",c:"Pantry"},{n:"Avocado",q:"2",c:"Produce"}]},
+  {name:"Tuscan White Bean Soup with Sausage",cuisine:"Italian",cal:520,protein:36,time:35,diff:1,ingredients:[{n:"Italian sausage",q:"1 lb",c:"Meat"},{n:"Cannellini beans",q:"2 cans",c:"Pantry"},{n:"Baby spinach",q:"3 cups",c:"Produce"},{n:"Canned tomatoes",q:"1 can",c:"Pantry"},{n:"Garlic",q:"4 cloves",c:"Produce"},{n:"Chicken stock",q:"2 cups",c:"Pantry"},{n:"Fresh rosemary",q:"2 sprigs",c:"Produce"},{n:"Parmesan",q:"¼ cup grated",c:"Dairy"}]},
+  {name:"Honey Garlic Salmon with Broccoli",cuisine:"American",cal:540,protein:52,time:25,diff:1,ingredients:[{n:"Salmon fillets (7 oz)",q:"2",c:"Seafood"},{n:"Honey",q:"3 tbsp",c:"Pantry"},{n:"Garlic",q:"4 cloves",c:"Produce"},{n:"Soy sauce",q:"2 tbsp",c:"Pantry"},{n:"Broccoli",q:"1 head",c:"Produce"},{n:"Butter",q:"2 tbsp",c:"Dairy"},{n:"Jasmine rice",q:"1 cup dry",c:"Grains"}]},
+  {name:"Chicken Fajitas with Peppers & Onions",cuisine:"Tex-Mex",cal:510,protein:48,time:25,diff:1,ingredients:[{n:"Chicken breast, sliced",q:"1.5 lbs",c:"Meat"},{n:"Bell peppers, mixed",q:"3",c:"Produce"},{n:"Onion",q:"1",c:"Produce"},{n:"Flour tortillas",q:"6",c:"Pantry"},{n:"Fajita seasoning",q:"2 tbsp",c:"Pantry"},{n:"Lime",q:"2",c:"Produce"},{n:"Sour cream",q:"¼ cup",c:"Dairy"},{n:"Shredded cheese",q:"½ cup",c:"Dairy"},{n:"Avocado",q:"1",c:"Produce"}]},
+  {name:"Baked Cod with Parmesan Herb Crust",cuisine:"American",cal:420,protein:46,time:25,diff:1,ingredients:[{n:"Cod fillets (6–8 oz)",q:"2",c:"Seafood"},{n:"Panko breadcrumbs",q:"¼ cup",c:"Pantry"},{n:"Parmesan",q:"¼ cup grated",c:"Dairy"},{n:"Butter",q:"2 tbsp",c:"Dairy"},{n:"Garlic",q:"2 cloves",c:"Produce"},{n:"Fresh parsley",q:"3 tbsp",c:"Produce"},{n:"Lemon",q:"2",c:"Produce"},{n:"Asparagus",q:"1 bunch",c:"Produce"}]},
+  {name:"Ground Lamb Bowls with Tzatziki & Rice",cuisine:"Greek",cal:600,protein:46,time:30,diff:2,ingredients:[{n:"Ground lamb",q:"1 lb",c:"Meat"},{n:"Jasmine or long-grain rice",q:"1 cup dry",c:"Grains"},{n:"Greek yogurt",q:"½ cup",c:"Dairy"},{n:"Cucumber",q:"1",c:"Produce"},{n:"Garlic",q:"4 cloves",c:"Produce"},{n:"Lemon",q:"1",c:"Produce"},{n:"Fresh dill",q:"3 tbsp",c:"Produce"},{n:"Cherry tomatoes",q:"1 cup",c:"Produce"},{n:"Cumin",q:"1 tsp",c:"Pantry"},{n:"Coriander",q:"1 tsp",c:"Pantry"}]},
+  {name:"One-Pan Chicken & Vegetables",cuisine:"Classic",cal:480,protein:50,time:45,diff:1,ingredients:[{n:"Chicken thighs, bone-in",q:"4",c:"Meat"},{n:"Carrots",q:"3",c:"Produce"},{n:"Broccoli",q:"1 head",c:"Produce"},{n:"Bell peppers",q:"2",c:"Produce"},{n:"Garlic",q:"4 cloves",c:"Produce"},{n:"Olive oil",q:"3 tbsp",c:"Pantry"},{n:"Italian seasoning",q:"2 tsp",c:"Pantry"},{n:"Lemon",q:"1",c:"Produce"}]}
+];
+
+function getMealsForDay(ds) {
+  const base = MEALS[ds] || [];
+  const extra = refreshed[ds] || [];
+  // extra is array of BACKUP_MEALS indices
+  const backups = extra.map(i => BACKUP_MEALS[i]).filter(Boolean);
+  return [...base, ...backups];
+}
+
+function refreshOptions(ds) {
+  const current = refreshed[ds] || [];
+  const used = new Set(current);
+  // Pick next 3 backups not already shown
+  const available = BACKUP_MEALS.map((_,i)=>i).filter(i => !used.has(i));
+  if (!available.length) {
+    // All 12 shown — reset
+    refreshed[ds] = [];
+  } else {
+    const picks = available.slice(0, Math.min(3, available.length));
+    refreshed[ds] = [...current, ...picks];
+  }
+  save();
+  renderOptionsView(ds);
+}
+
 function renderOptionsView(ds) {
-  const meals = MEALS[ds];
+  const meals = getMealsForDay(ds);
+  const baseMealCount = (MEALS[ds] || []).length;
   const curSel = sel[ds];
   const body = document.getElementById('slideBody');
 
-  let html = `<div class="opts-wrap"><div class="opts-hdr">Choose your dinner</div>`;
+  let html = `<div class="opts-wrap">
+    <div class="opts-hdr">Choose your dinner</div>
+    <button class="opts-refresh-btn" onclick="refreshOptions('${ds}')">
+      <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M12 7A5 5 0 112 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M12 3v4h-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Refresh Options
+    </button>`;
+
   meals.forEach((m, i) => {
     const isSel = curSel === i;
     const timeStr = m.time >= 120 ? `${Math.round(m.time/60)}h` : `${m.time}m`;
     const diffLbl = ['Easy','Easy','Medium','Medium','Hard','Hard'][m.diff] || 'Medium';
     const keyIngs = m.ingredients.slice(0,4).map(ing => `<span class="ing-chip">${ing.n}</span>`).join('');
     const isFav = !!favs[m.name];
+    const isBackup = i >= baseMealCount;
+    const labelNum = isBackup ? `Backup ${i - baseMealCount + 1}` : `Option ${i+1}`;
 
     html += `<div class="opt-card${isSel?' selected':''}" id="optcard-${i}" onclick="selectMeal(${i})">
       <div class="opt-chk">${isSel?'✓':''}</div>
-      <button class="opt-fav${isFav?' on':''}" onclick="event.stopPropagation();toggleFav('${ds}',${i})">${isFav?'★':'☆'}</button>
+      <button class="opt-fav${isFav?' on':''}" onclick="event.stopPropagation();toggleFav('${ds}',${i},'${m.name.replace(/'/g,"\\'")}')">${isFav?'★':'☆'}</button>
       <div class="opt-top">
-        <div class="opt-num">${m.cuisine} · Option ${i+1}</div>
+        <div class="opt-num">${m.cuisine} · ${labelNum}</div>
         <div class="opt-name">${m.name}</div>
         ${m.note ? `<div style="font-size:10px;color:${m.note.startsWith('⚠️')?'var(--ochre)':'var(--ink4)'};margin-bottom:5px;line-height:1.4;">${m.note}</div>` : ''}
         <div class="opt-stats">
@@ -984,7 +1060,6 @@ function selectMeal(mi) {
   sel[ds] = mi;
   save();
 
-  // Animate check on option cards
   document.querySelectorAll('.opt-card').forEach((card, i) => {
     card.classList.toggle('selected', i === mi);
     const chk = card.querySelector('.opt-chk');
@@ -993,7 +1068,6 @@ function selectMeal(mi) {
 
   updateMeta();
 
-  // After short delay, show recipe
   setTimeout(() => {
     viewingRecipe = true;
     renderSlideBody();
@@ -1145,9 +1219,36 @@ async function backgroundGenerateAll() {
   updateMeta();
 }
 
+// ─── SERVING MULTIPLIER HELPER ───────────────────────────────
+function multiplyQty(q, mult) {
+  if (mult === 1) return q;
+  // Try to parse fractions and numbers
+  const fracs = {'½':0.5,'¼':0.25,'¾':0.75,'⅓':0.333,'⅔':0.667,'⅛':0.125};
+  let str = q.trim();
+  // replace unicode fractions
+  let num = 0;
+  let rest = str;
+  Object.entries(fracs).forEach(([f, v]) => {
+    if (str.startsWith(f)) { num = v; rest = str.slice(f.length).trim(); }
+  });
+  // leading number
+  const match = rest.match(/^(\d+\.?\d*)/);
+  if (match) { num += parseFloat(match[1]); rest = rest.slice(match[1].length).trim(); }
+  if (num === 0) return q; // can't parse, return as-is
+  const result = num * mult;
+  const unit = rest;
+  // Format cleanly
+  const display = result % 1 === 0 ? result.toString() : result === 0.5 ? '½' : result === 0.25 ? '¼' : result === 0.75 ? '¾' : result.toFixed(1).replace(/\.0$/,'');
+  return unit ? `${display} ${unit}` : display;
+}
+
 // ─── RECIPE VIEW ─────────────────────────────────────────────
 async function renderRecipeView(ds, mi) {
-  const meal = MEALS[ds][mi];
+  const allMeals = getMealsForDay(ds);
+  const meal = allMeals[mi];
+  if (!meal) { showOptions(); return; }
+
+  const sv = servings[ds] || 1; // current multiplier
   const body = document.getElementById('slideBody');
   const diffLbl = ['Easy','Easy','Medium','Medium','Hard','Hard'][meal.diff] || 'Medium';
   const timeStr = meal.time >= 120 ? `${Math.round(meal.time/60)}h ${meal.time%60>0?meal.time%60+'m':''}`.trim() : `${meal.time} min`;
@@ -1155,24 +1256,19 @@ async function renderRecipeView(ds, mi) {
   const pips = [1,2,3,4,5].map(n => `<div class="pip${n<=meal.diff?' on':''}"></div>`).join('');
 
   const ingsHtml = meal.ingredients.map(ing =>
-    `<div class="ing-row"><span class="ing-name">${ing.n}</span><span class="ing-qty">${ing.q}</span></div>`
+    `<div class="ing-row"><span class="ing-name">${ing.n}</span><span class="ing-qty">${multiplyQty(ing.q, sv)}</span></div>`
   ).join('');
 
-  // Check cache first
   const cached = recipeCache[meal.name];
-  const stepsContent = cached
-    ? stepsHtmlFromCache(cached)
-    : `<div id="stepsContainer">
-        ${[1,2,3,4,5].map(i => `
-          <div class="step-row">
-            <div class="step-n" style="color:var(--cream3)">${String(i).padStart(2,'0')}</div>
-            <div class="step-body">
-              <div class="skeleton" style="height:14px;width:${50+Math.random()*30}%;margin-bottom:6px;"></div>
-              <div class="skeleton" style="height:12px;width:${60+Math.random()*30}%;margin-bottom:4px;"></div>
-              <div class="skeleton" style="height:12px;width:${40+Math.random()*20}%;"></div>
-            </div>
-          </div>`).join('')}
-      </div>`;
+  const skeletonHtml = [1,2,3,4,5].map(i => `
+    <div class="step-row">
+      <div class="step-n" style="color:var(--cream3)">${String(i).padStart(2,'0')}</div>
+      <div class="step-body">
+        <div class="skeleton" style="height:14px;width:${50+Math.random()*30}%;margin-bottom:6px;"></div>
+        <div class="skeleton" style="height:12px;width:${60+Math.random()*30}%;margin-bottom:4px;"></div>
+        <div class="skeleton" style="height:12px;width:${40+Math.random()*20}%;"></div>
+      </div>
+    </div>`).join('');
 
   body.innerHTML = `<div class="recipe-wrap">
     <div class="recipe-hero">
@@ -1182,10 +1278,19 @@ async function renderRecipeView(ds, mi) {
       <button class="recipe-fav${isFav?' on':''}" id="recipeFavBtn" onclick="toggleFavFromRecipe('${ds}',${mi})">${isFav?'★':'☆'}</button>
     </div>
     <div class="recipe-stats">
-      <div class="rstat"><div class="rstat-val">${meal.cal}</div><div class="rstat-lbl">Calories</div></div>
-      <div class="rstat"><div class="rstat-val">${meal.protein}g</div><div class="rstat-lbl">Protein</div></div>
+      <div class="rstat"><div class="rstat-val">${meal.cal * sv}</div><div class="rstat-lbl">Calories</div></div>
+      <div class="rstat"><div class="rstat-val">${meal.protein * sv}g</div><div class="rstat-lbl">Protein</div></div>
       <div class="rstat"><div class="rstat-val">${timeStr}</div><div class="rstat-lbl">Cook Time</div></div>
       <div class="rstat"><div class="diff-pips">${pips}</div><div class="rstat-lbl">${diffLbl}</div></div>
+    </div>
+
+    <div class="serving-row">
+      <span class="serving-label">Servings</span>
+      <div class="serving-btns">
+        <button class="serving-btn${sv===1?' active':''}" onclick="setServings('${ds}',1)">1×</button>
+        <button class="serving-btn${sv===2?' active':''}" onclick="setServings('${ds}',2)">2×</button>
+        <button class="serving-btn${sv===3?' active':''}" onclick="setServings('${ds}',3)">3×</button>
+      </div>
     </div>
 
     <div class="recipe-actions">
@@ -1200,21 +1305,17 @@ async function renderRecipeView(ds, mi) {
     </div>
 
     <div class="recipe-sec">
-      <div class="recipe-sec-title">Ingredients</div>
+      <div class="recipe-sec-title">Ingredients${sv > 1 ? ` <span style="font-size:10px;color:var(--rust);font-weight:400;letter-spacing:0.1em;">(×${sv})</span>` : ''}</div>
       <div>${ingsHtml}</div>
     </div>
     <div class="recipe-sec" style="margin-top:16px;">
       <div class="recipe-sec-title">Instructions</div>
-      ${cached
-        ? stepsContent
-        : `<div id="stepsContainer">${stepsContent.replace(/<div id="stepsContainer">|<\/div>$/,'')}</div>`
-      }
+      <div id="stepsContainer">${cached ? stepsHtmlFromCache(cached) : skeletonHtml}</div>
     </div>
     <button class="change-opts-btn" onclick="showOptions()">↺ View other options for today</button>
     <div style="height:24px;"></div>
   </div>`;
 
-  // If not cached, fetch individually right now for immediate display
   if (!cached) {
     try {
       const steps = await fetchStepsFromAPI(meal);
@@ -1226,11 +1327,17 @@ async function renderRecipeView(ds, mi) {
       const container = document.getElementById('stepsContainer');
       if (container) container.innerHTML = `
         <div style="padding:16px 0;">
-          <div style="font-size:13px;color:var(--ink3);margin-bottom:12px;">Recipe steps are being loaded in the background. Check back in a moment, or tap below to retry.</div>
+          <div style="font-size:13px;color:var(--ink3);margin-bottom:12px;">Recipe steps are loading in the background. Try tapping again in a moment.</div>
           <button onclick="renderRecipeView('${ds}',${mi})" style="background:none;border:1.5px solid var(--border);padding:8px 16px;border-radius:4px;cursor:pointer;font-family:'Barlow',sans-serif;font-size:12px;color:var(--ink3);">↺ Retry</button>
         </div>`;
     }
   }
+}
+
+function setServings(ds, mult) {
+  servings[ds] = mult;
+  save();
+  renderRecipeView(ds, sel[ds]);
 }
 
 function showOptions() {
@@ -1256,6 +1363,9 @@ function toggleCooked(ds) {
 function removeRecipe(ds) {
   delete sel[ds];
   delete cooked[ds];
+  delete servings[ds];
+  delete saveLater[ds];
+  delete refreshed[ds];
   save();
   closeSlide();
   renderGrocery();
@@ -1274,8 +1384,10 @@ function closeSlide() {
 // ═══════════════════════════════════════════════════════════════
 // FAVORITES
 // ═══════════════════════════════════════════════════════════════
-function toggleFav(ds, mi) {
-  const meal = MEALS[ds][mi];
+function toggleFav(ds, mi, mealNameOverride) {
+  const allMeals = getMealsForDay(ds);
+  const meal = allMeals[mi] || (mealNameOverride ? {name: mealNameOverride} : null);
+  if (!meal) return;
   if (favs[meal.name]) {
     delete favs[meal.name];
   } else {
@@ -1288,7 +1400,9 @@ function toggleFav(ds, mi) {
 }
 
 function toggleFavFromRecipe(ds, mi) {
-  const meal = MEALS[ds][mi];
+  const allMeals = getMealsForDay(ds);
+  const meal = allMeals[mi];
+  if (!meal) return;
   if (favs[meal.name]) {
     delete favs[meal.name];
   } else {
@@ -1351,114 +1465,105 @@ function removeFav(name) {
 const CAT_ORDER = ['Seafood','Meat','Produce','Dairy','Grains','Pantry'];
 
 function renderGrocery() {
-  const dates = Object.keys(sel).sort().filter(ds => !cooked[ds]);
+  const allSelDates = Object.keys(sel).sort().filter(ds => !cooked[ds]);
   const body = document.getElementById('grocContent');
   const sub = document.getElementById('grocSub');
 
-  if (!dates.length) {
+  if (!allSelDates.length) {
     sub.textContent = 'Select dinners to build your list';
     body.innerHTML = `<div class="groc-empty"><div class="groc-empty-h">Start Planning</div><div class="groc-empty-p">Tap any day in the Plan tab and choose a dinner. Your grocery list builds automatically.</div></div>`;
     return;
   }
 
-  // Aggregate ingredients — skip cooked meals
+  // Split dates: active vs saved-for-later
+  const activeDates = allSelDates.filter(ds => !saveLater[ds]);
+  const laterDates  = allSelDates.filter(ds =>  saveLater[ds]);
+
+  // Aggregate ingredients from active dates only (respects servings multiplier)
   const agg = {};
-  dates.forEach(ds => {
-    const m = MEALS[ds][sel[ds]];
+  activeDates.forEach(ds => {
+    const allMeals = getMealsForDay(ds);
+    const m = allMeals[sel[ds]];
+    if (!m) return;
+    const sv = servings[ds] || 1;
     const d = new Date(ds + 'T12:00:00');
     const label = d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
     m.ingredients.forEach(ing => {
       const k = `${ing.c}|||${ing.n}`;
-      if (!agg[k]) agg[k] = { c: ing.c, n: ing.n, q: ing.q, dates: [], meals: [] };
+      if (!agg[k]) agg[k] = { c: ing.c, n: ing.n, q: ing.q, sv: 1, dates: [], meals: [] };
       agg[k].dates.push(label);
       agg[k].meals.push(m.name.split(' with ')[0].split(' & ')[0]);
+      if (sv > agg[k].sv) agg[k].sv = sv;
     });
   });
 
-  // Split into active and saved-for-later
-  const activeItems = {};
-  const laterItems = {};
-  Object.entries(agg).forEach(([k, item]) => {
-    if (saveLater[k]) laterItems[k] = item;
-    else activeItems[k] = item;
-  });
+  const totalActive = Object.keys(agg).length;
+  const ckd = Object.keys(shopCk).filter(k => shopCk[k] && agg[k]).length;
+  sub.textContent = `${activeDates.length} meal${activeDates.length!==1?'s':''} · ${totalActive - ckd} items remaining${laterDates.length ? ` · ${laterDates.length} meal${laterDates.length!==1?'s':''} saved for later` : ''}`;
 
-  const totalActive = Object.keys(activeItems).length;
-  const ckd = Object.keys(shopCk).filter(k => shopCk[k] && activeItems[k]).length;
-  const laterCount = Object.keys(laterItems).length;
-  sub.textContent = `${dates.length} meal${dates.length>1?'s':''} · ${totalActive - ckd} items remaining${laterCount ? ` · ${laterCount} saved for later` : ''}`;
-
-  // Meal chips
-  const chips = dates.map(ds => {
-    const m = MEALS[ds][sel[ds]];
+  // ── Meal-level save-for-later checkboxes at top ──
+  const mealChipsHtml = allSelDates.map(ds => {
+    const allMeals = getMealsForDay(ds);
+    const m = allMeals[sel[ds]];
+    if (!m) return '';
     const d = new Date(ds + 'T12:00:00');
     const label = d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
-    const short = m.name.length > 38 ? m.name.slice(0,36)+'…' : m.name;
-    return `<div class="meal-chip-row"><span class="chip-date">${label}</span><span class="chip-name">${short}</span></div>`;
+    const short = m.name.length > 30 ? m.name.slice(0,28)+'\u2026' : m.name;
+    const isSaved = !!saveLater[ds];
+    const sv = servings[ds] || 1;
+    return `<div class="meal-save-row">
+      <div class="meal-save-cb${isSaved?' on':''}" onclick="toggleMealSaveLater('${ds}')">${isSaved?'\u2713':''}</div>
+      <span class="meal-save-date">${label}</span>
+      <span class="meal-save-name">${short}${sv>1?` <span style="color:var(--rust);font-size:10px;">\xd7${sv}</span>`:''}</span>
+      ${isSaved ? '<span class="meal-save-label">\u2192 shop later</span>' : ''}
+    </div>`;
   }).join('');
 
-  // Build active item rows by category
+  // ── Active ingredient list ──
   const byCat = {};
-  Object.values(activeItems).forEach(item => {
+  Object.values(agg).forEach(item => {
     if (!byCat[item.c]) byCat[item.c] = [];
     byCat[item.c].push(item);
   });
 
-  function itemRow(item, isSavedLater = false) {
-    const k = `${item.c}|||${item.n}`;
-    const ck = shopCk[k];
-    const forLabel = item.meals.length > 1
-      ? `<span class="groc-for">${[...new Set(item.meals)].slice(0,2).join(', ')}${item.meals.length > 2 ? ' +more' : ''}</span>`
-      : `<span class="groc-for">${item.meals[0]}</span>`;
-    const saveLabel = isSavedLater ? 'Move back' : 'Save for later';
-    return `<div class="groc-item${ck?' ckd':''}${isSavedLater?' saved-later':''}" style="padding-right:8px;">
-      <div class="g-cb" onclick="toggleShop('${k.replace(/'/g,"\\'")}')">${ck?'✓':''}</div>
-      <div class="groc-item-r" onclick="toggleShop('${k.replace(/'/g,"\\'")}')">
-        <div class="groc-item-name">${item.n}</div>
-        <div class="groc-item-meta">
-          ${item.dates.length > 1 ? `<span class="groc-multi">×${item.dates.length} meals</span>` : `<span class="groc-qty">${item.q}</span>`}
-          ${forLabel}
-        </div>
-      </div>
-      <button class="groc-save-btn" onclick="toggleSaveLater('${k.replace(/'/g,"\\'")}')">${saveLabel}</button>
-    </div>`;
-  }
-
   let cols = '';
-  CAT_ORDER.forEach(cat => {
-    if (!byCat[cat]) return;
-    const items = byCat[cat].sort((a,b) => a.n.localeCompare(b.n));
-    cols += `<div class="groc-sec">
-      <div class="groc-sec-title">${cat}</div>
-      ${items.map(item => itemRow(item, false)).join('')}
-    </div>`;
-  });
-
-  // Saved for later section
-  let laterHtml = '';
-  if (laterCount > 0) {
-    const laterByCat = {};
-    Object.values(laterItems).forEach(item => {
-      if (!laterByCat[item.c]) laterByCat[item.c] = [];
-      laterByCat[item.c].push(item);
-    });
-    const laterRows = CAT_ORDER.map(cat => {
-      if (!laterByCat[cat]) return '';
-      return laterByCat[cat].sort((a,b)=>a.n.localeCompare(b.n)).map(item => itemRow(item, true)).join('');
-    }).join('');
-
-    laterHtml = `
-      <div class="groc-saved-header" onclick="toggleSavedSection()">
-        <span class="groc-saved-label">Saved for Later</span>
-        <span class="groc-saved-count">${laterCount}</span>
-        <span class="groc-saved-chevron${savedSectionOpen?' open':''}" id="savedChevron">▾</span>
-      </div>
-      <div id="savedItemsWrap" style="${savedSectionOpen?'':'display:none;'}opacity:0.65;">
-        ${laterRows}
+  if (activeDates.length) {
+    CAT_ORDER.forEach(cat => {
+      if (!byCat[cat]) return;
+      const items = byCat[cat].sort((a,b) => a.n.localeCompare(b.n));
+      cols += `<div class="groc-sec">
+        <div class="groc-sec-title">${cat}</div>
+        ${items.map(item => {
+          const k = `${item.c}|||${item.n}`;
+          const ck = shopCk[k];
+          const qDisplay = multiplyQty(item.q, item.sv);
+          const forLabel = item.meals.length > 1
+            ? `<span class="groc-for">${[...new Set(item.meals)].slice(0,2).join(', ')}${item.meals.length > 2 ? ' +more' : ''}</span>`
+            : `<span class="groc-for">${item.meals[0]}</span>`;
+          return `<div class="groc-item${ck?' ckd':''}" onclick="toggleShop('${k.replace(/'/g,"\\'")}')">
+            <div class="g-cb">${ck?'\u2713':''}</div>
+            <div class="groc-item-r">
+              <div class="groc-item-name">${item.n}</div>
+              <div class="groc-item-meta">
+                ${item.dates.length > 1 ? `<span class="groc-multi">\xd7${item.dates.length} meals</span>` : `<span class="groc-qty">${qDisplay}</span>`}
+                ${forLabel}
+              </div>
+            </div>
+          </div>`;
+        }).join('')}
       </div>`;
+    });
+  } else {
+    cols = `<div style="padding:24px 16px;font-size:13px;color:var(--ink4);font-style:italic;">All meals saved for later. Uncheck a meal above to show its ingredients.</div>`;
   }
 
-  body.innerHTML = `<div class="meal-chips">${chips}</div>${cols}${laterHtml}<div style="height:40px;"></div>`;
+  body.innerHTML = `<div class="meal-chips" style="padding:10px 16px;">${mealChipsHtml}</div>${cols}<div style="height:40px;"></div>`;
+}
+
+function toggleMealSaveLater(ds) {
+  saveLater[ds] = !saveLater[ds];
+  if (!saveLater[ds]) delete saveLater[ds];
+  save(); renderGrocery();
 }
 
 function toggleShop(k) { shopCk[k] = !shopCk[k]; save(); renderGrocery(); }
@@ -1466,74 +1571,59 @@ function clearChecked() { shopCk = {}; save(); renderGrocery(); }
 function clearAllMeals() {
   if (!Object.keys(sel).length) return;
   if (confirm('Clear all meal selections?')) {
-    sel = {}; shopCk = {}; cooked = {}; saveLater = {};
+    sel = {}; shopCk = {}; cooked = {}; saveLater = {}; servings = {}; refreshed = {};
     save(); renderPlan(); renderGrocery(); updateMeta();
   }
 }
 
-function toggleSaveLater(k) {
-  saveLater[k] = !saveLater[k];
-  if (!saveLater[k]) delete saveLater[k];
-  save(); renderGrocery();
-}
-
-function toggleSavedSection() {
-  savedSectionOpen = !savedSectionOpen;
-  const wrap = document.getElementById('savedItemsWrap');
-  const chev = document.getElementById('savedChevron');
-  if (wrap) wrap.style.display = savedSectionOpen ? '' : 'none';
-  if (chev) chev.className = `groc-saved-chevron${savedSectionOpen?' open':''}`;
-}
-
 function shareGroceryList() {
-  const dates = Object.keys(sel).sort().filter(ds => !cooked[ds]);
-  if (!dates.length) { alert('No meals planned yet.'); return; }
+  const activeDates = Object.keys(sel).sort().filter(ds => !cooked[ds] && !saveLater[ds]);
+  if (!activeDates.length) { alert('No active meals in your grocery list.'); return; }
 
   const agg = {};
-  dates.forEach(ds => {
-    const m = MEALS[ds][sel[ds]];
+  activeDates.forEach(ds => {
+    const allMeals = getMealsForDay(ds);
+    const m = allMeals[sel[ds]];
+    if (!m) return;
+    const sv = servings[ds] || 1;
     m.ingredients.forEach(ing => {
       const k = `${ing.c}|||${ing.n}`;
-      if (!agg[k]) agg[k] = { c: ing.c, n: ing.n, q: ing.q, count: 0 };
+      if (!agg[k]) agg[k] = { c: ing.c, n: ing.n, q: ing.q, sv, count: 0 };
       agg[k].count++;
+      if (sv > agg[k].sv) agg[k].sv = sv;
     });
   });
 
-  // Only include items not checked off and not saved for later
-  const lines = ['🛒 GROCERY LIST\n'];
+  const lines = ['\ud83d\uded2 GROCERY LIST\n'];
   CAT_ORDER.forEach(cat => {
     const items = Object.values(agg)
-      .filter(i => i.c === cat && !shopCk[`${i.c}|||${i.n}`] && !saveLater[`${i.c}|||${i.n}`])
+      .filter(i => i.c === cat && !shopCk[`${i.c}|||${i.n}`])
       .sort((a,b) => a.n.localeCompare(b.n));
     if (!items.length) return;
     lines.push(`\n${cat.toUpperCase()}`);
-    items.forEach(i => lines.push(`• ${i.n}${i.count > 1 ? ` (×${i.count})` : ''}`));
+    items.forEach(i => {
+      const qty = multiplyQty(i.q, i.sv);
+      lines.push(`\u2022 ${i.n} — ${qty}${i.count > 1 ? ` (${i.count} meals)` : ''}`);
+    });
   });
 
   const text = lines.join('\n');
-
-  // Try native share sheet first (iOS), fall back to clipboard
   if (navigator.share) {
     navigator.share({ text }).catch(() => copyToClipboard(text));
-  } else if (navigator.clipboard) {
-    copyToClipboard(text);
   } else {
-    // SMS deep link fallback
-    window.open('sms:?body=' + encodeURIComponent(text));
+    copyToClipboard(text);
   }
 }
 
 function copyToClipboard(text) {
-  navigator.clipboard.writeText(text).then(() => {
-    const btn = document.querySelector('.share-btn');
-    if (btn) {
-      const orig = btn.textContent;
-      btn.textContent = 'Copied!';
-      setTimeout(() => { btn.textContent = orig; }, 2000);
-    }
-  }).catch(() => {
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(() => {
+      const btn = document.querySelector('.share-btn');
+      if (btn) { const o = btn.textContent; btn.textContent = 'Copied!'; setTimeout(() => btn.textContent = o, 2000); }
+    }).catch(() => window.open('sms:?body=' + encodeURIComponent(text)));
+  } else {
     window.open('sms:?body=' + encodeURIComponent(text));
-  });
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════

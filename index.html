@@ -198,6 +198,23 @@ body{background:var(--cream);color:var(--ink);font-family:'Barlow',sans-serif;fo
 .groc-qty{font-family:'Barlow Condensed',sans-serif;font-size:11px;color:var(--ink4);}
 .groc-multi{font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;background:var(--ochre-lt);color:var(--ochre);padding:1px 5px;border-radius:2px;letter-spacing:0.1em;}
 .groc-for{font-size:10px;color:var(--rust);font-style:italic;}
+.groc-save-btn{background:none;border:none;font-size:10px;font-family:'Barlow Condensed',sans-serif;letter-spacing:0.15em;text-transform:uppercase;color:var(--ink4);cursor:pointer;padding:2px 0 2px 6px;flex-shrink:0;transition:color 0.15s;}
+.groc-save-btn:active{color:var(--ochre);}
+.groc-saved-header{display:flex;align-items:center;gap:8px;cursor:pointer;padding:14px 16px 8px;border-top:1px solid var(--border2);}
+.groc-saved-label{font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:0.3em;text-transform:uppercase;color:var(--ink4);}
+.groc-saved-count{font-family:'Barlow Condensed',sans-serif;font-size:10px;background:var(--cream3);color:var(--ink4);padding:1px 7px;border-radius:10px;}
+.groc-saved-chevron{font-size:10px;color:var(--ink4);margin-left:auto;transition:transform 0.2s;}
+.groc-saved-chevron.open{transform:rotate(180deg);}
+.groc-item.saved-later{opacity:0.5;}
+.groc-item.saved-later .groc-save-btn{color:var(--rust);}
+.share-btn{background:var(--ink);color:var(--cream);border:none;padding:7px 14px;border-radius:2px;cursor:pointer;font-family:'Barlow',sans-serif;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;transition:all 0.15s;flex:1;}
+.share-btn:active{background:var(--ink2);}
+/* ── SYNC ── */
+.sync-indicator{display:flex;align-items:center;gap:5px;font-family:'Barlow Condensed',sans-serif;font-size:10px;letter-spacing:0.1em;color:rgba(245,240,232,0.45);}
+.sync-dot{width:6px;height:6px;border-radius:50%;background:var(--sage);flex-shrink:0;transition:background 0.3s;}
+.sync-dot.syncing{background:var(--ochre);animation:pulse 1s infinite;}
+.sync-dot.error{background:var(--rust);}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.3;}}
 
 /* ── FAVORITES TAB ── */
 .favs-toolbar{padding:16px 16px 12px;border-bottom:1px solid var(--border);background:var(--cream);position:sticky;top:0;z-index:10;}
@@ -289,6 +306,7 @@ body{background:var(--cream);color:var(--ink);font-family:'Barlow',sans-serif;fo
 
 <div class="topnav">
   <div class="topnav-brand">Dinner Planner</div>
+  <div class="sync-indicator" id="syncIndicator"><div class="sync-dot" id="syncDot"></div><span id="syncLabel">Synced</span></div>
   <div class="topnav-meta" id="topMeta">No meals selected</div>
 </div>
 
@@ -313,6 +331,7 @@ body{background:var(--cream);color:var(--ink);font-family:'Barlow',sans-serif;fo
       <div class="groc-actions">
         <button class="g-btn" onclick="clearChecked()">Clear Checked</button>
         <button class="g-btn" onclick="clearAllMeals()">Clear All</button>
+        <button class="share-btn" onclick="shareGroceryList()">Share List</button>
       </div>
     </div>
     <div id="grocContent"></div>
@@ -664,21 +683,122 @@ const MEALS = {
 // ═══════════════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════════════
-let sel = {};       // { "2026-03-01": 0 }
-let shopCk = {};    // { "Cat|||Name": true }
-let favs = {};      // { "mealKey": { ...mealData, savedAt } }
-let cooked = {};    // { "2026-03-01": true }
+let sel = {};         // { "2026-03-01": 0 }
+let shopCk = {};      // { "Cat|||Name": true }
+let favs = {};        // { "mealName": { ...meal, savedAt } }
+let cooked = {};      // { "2026-03-01": true }
+let saveLater = {};   // { "Cat|||Name": true }
 let activeDate = null;
 let viewingRecipe = false;
+let savedSectionOpen = false;
+
+// ── SUPABASE ──────────────────────────────────────────────────
+const SUPA_URL = 'https://nwdpjywgvucfqbobrfye.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im53ZHBqeXdndnVjZnFib2JyZnllIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4NzY2NjAsImV4cCI6MjA4OTQ1MjY2MH0.fZ47PJ-M1I6o9Vtq2nDXqOehn9yY2UlPCZi52HTakIw';
+let supaRealtimeChannel = null;
+let saveTimer = null;
+
+function setSyncStatus(state) {
+  const dot = document.getElementById('syncDot');
+  const lbl = document.getElementById('syncLabel');
+  if (!dot || !lbl) return;
+  dot.className = 'sync-dot' + (state === 'syncing' ? ' syncing' : state === 'error' ? ' error' : '');
+  lbl.textContent = state === 'syncing' ? 'Syncing…' : state === 'error' ? 'Offline' : 'Synced';
+}
+
+async function supaLoad() {
+  try {
+    const res = await fetch(`${SUPA_URL}/rest/v1/planner_state?id=eq.shared&select=*`, {
+      headers: { 'apikey': SUPA_KEY, 'Authorization': `Bearer ${SUPA_KEY}` }
+    });
+    if (!res.ok) throw new Error('load failed');
+    const rows = await res.json();
+    if (rows.length) {
+      const r = rows[0];
+      sel      = r.sel       || {};
+      shopCk   = r.shop_ck   || {};
+      cooked   = r.cooked    || {};
+      favs     = r.favs      || {};
+      saveLater= r.save_later|| {};
+    }
+    setSyncStatus('ok');
+  } catch(e) {
+    // Fall back to localStorage
+    try {
+      const d = JSON.parse(localStorage.getItem('dp_v5') || '{}');
+      sel = d.sel||{}; shopCk = d.shopCk||{}; favs = d.favs||{}; cooked = d.cooked||{}; saveLater = d.saveLater||{};
+    } catch(_){}
+    setSyncStatus('error');
+  }
+}
+
+async function supaSync() {
+  // Also always write to localStorage as offline backup
+  localStorage.setItem('dp_v5', JSON.stringify({ sel, shopCk, favs, cooked, saveLater }));
+
+  setSyncStatus('syncing');
+  try {
+    const res = await fetch(`${SUPA_URL}/rest/v1/planner_state?id=eq.shared`, {
+      method: 'PATCH',
+      headers: {
+        'apikey': SUPA_KEY,
+        'Authorization': `Bearer ${SUPA_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify({
+        sel, shop_ck: shopCk, cooked, favs, save_later: saveLater,
+        updated_at: new Date().toISOString()
+      })
+    });
+    if (!res.ok) throw new Error('sync failed');
+    setSyncStatus('ok');
+  } catch(e) {
+    setSyncStatus('error');
+  }
+}
+
+// Debounce saves so rapid taps don't hammer the API
+function save() {
+  localStorage.setItem('dp_v5', JSON.stringify({ sel, shopCk, favs, cooked, saveLater }));
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => supaSync(), 800);
+}
 
 function load() {
   try {
     const d = JSON.parse(localStorage.getItem('dp_v5') || '{}');
-    sel = d.sel || {}; shopCk = d.shopCk || {}; favs = d.favs || {}; cooked = d.cooked || {};
+    sel = d.sel||{}; shopCk = d.shopCk||{}; favs = d.favs||{}; cooked = d.cooked||{}; saveLater = d.saveLater||{};
   } catch(e){}
 }
-function save() {
-  localStorage.setItem('dp_v5', JSON.stringify({ sel, shopCk, favs, cooked }));
+
+// Real-time listener — when Whitney's device changes, your screen updates
+async function supaSubscribe() {
+  try {
+    const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
+    const supa = createClient(SUPA_URL, SUPA_KEY);
+    supa.channel('planner_state_changes')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'planner_state' }, payload => {
+        const r = payload.new;
+        sel       = r.sel        || {};
+        shopCk    = r.shop_ck    || {};
+        cooked    = r.cooked     || {};
+        favs      = r.favs       || {};
+        saveLater = r.save_later || {};
+        localStorage.setItem('dp_v5', JSON.stringify({ sel, shopCk, favs, cooked, saveLater }));
+        renderPlan();
+        renderGrocery();
+        updateMeta();
+        setSyncStatus('ok');
+      })
+      .subscribe();
+  } catch(e) {
+    // Real-time unavailable — polling fallback every 30s
+    setInterval(async () => {
+      await supaLoad();
+      renderPlan(); renderGrocery(); updateMeta();
+    }, 30000);
+  }
 }
 const TODAY = new Date().toISOString().slice(0,10);
 
@@ -909,17 +1029,15 @@ function stepsHtmlFromCache(steps) {
 
 async function fetchStepsFromAPI(meal) {
   const ingredientList = meal.ingredients.map(i => `${i.n}: ${i.q}`).join(', ');
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  const response = await fetch('/.netlify/functions/recipe', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 800,
-      system: `You are a professional chef. Return ONLY a JSON array of step objects, no markdown, no preamble. Each step: {"title":"short name","text":"1-3 sentence instruction with specific temps/times/techniques","time":"X min or null"}. 5-7 steps max.`,
-      messages: [{
-        role: 'user',
-        content: `Steps for: ${meal.name} (${meal.cuisine}, ${meal.time} min, difficulty ${meal.diff}/5). Ingredients: ${ingredientList}. Serves 2.`
-      }]
+      mealName: meal.name,
+      cuisine: meal.cuisine,
+      time: meal.time,
+      diff: meal.diff,
+      ingredients: ingredientList
     })
   });
   const data = await response.json();
@@ -973,17 +1091,17 @@ async function backgroundGenerateAll() {
         `"${m.name}": ${m.cuisine}, ${m.time}min, diff ${m.diff}/5. Ingredients: ${m.ingredients.map(x=>`${x.n}: ${x.q}`).join(', ')}`
       ).join('\n\n');
 
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
+      const response = await fetch('/.netlify/functions/recipe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 2500,
-          system: `You are a professional chef. Return ONLY a valid JSON object where each key is a meal name and value is an array of step objects. No markdown, no preamble, just raw JSON. Each step: {"title":"short name","text":"1-3 sentence instruction with specific temps/times","time":"X min or null"}. 5-7 steps per recipe.`,
-          messages: [{
-            role: 'user',
-            content: `Generate cooking steps for these ${batch.length} recipes (serves 2 each):\n\n${ingredientsBlock}`
-          }]
+          mealName: `BATCH:${batch.map(m=>m.name).join('|')}`,
+          cuisine: batch.map(m=>m.cuisine).join(','),
+          time: batch.map(m=>m.time).join(','),
+          diff: batch.map(m=>m.diff).join(','),
+          ingredients: batch.map(m =>
+            `"${m.name}": ${m.cuisine}, ${m.time}min, diff ${m.diff}/5. Ingredients: ${m.ingredients.map(x=>`${x.n}: ${x.q}`).join(', ')}`
+          ).join('\n\n')
         })
       });
 
@@ -1233,20 +1351,19 @@ function removeFav(name) {
 const CAT_ORDER = ['Seafood','Meat','Produce','Dairy','Grains','Pantry'];
 
 function renderGrocery() {
-  const dates = Object.keys(sel).sort();
+  const dates = Object.keys(sel).sort().filter(ds => !cooked[ds]);
   const body = document.getElementById('grocContent');
   const sub = document.getElementById('grocSub');
 
   if (!dates.length) {
     sub.textContent = 'Select dinners to build your list';
-    body.innerHTML = `<div class="groc-empty"><div class="groc-empty-h">Start Planning</div><div class="groc-empty-p">Tap any day in the calendar and choose a dinner. Your grocery list builds automatically.</div></div>`;
+    body.innerHTML = `<div class="groc-empty"><div class="groc-empty-h">Start Planning</div><div class="groc-empty-p">Tap any day in the Plan tab and choose a dinner. Your grocery list builds automatically.</div></div>`;
     return;
   }
 
   // Aggregate ingredients — skip cooked meals
   const agg = {};
   dates.forEach(ds => {
-    if (cooked[ds]) return; // cooked = already shopped/made, remove from list
     const m = MEALS[ds][sel[ds]];
     const d = new Date(ds + 'T12:00:00');
     const label = d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
@@ -1258,9 +1375,18 @@ function renderGrocery() {
     });
   });
 
-  const total = Object.keys(agg).length;
-  const ckd = Object.keys(shopCk).filter(k => shopCk[k] && agg[k]).length;
-  sub.textContent = `${dates.length} meal${dates.length>1?'s':''} · ${total - ckd} items remaining`;
+  // Split into active and saved-for-later
+  const activeItems = {};
+  const laterItems = {};
+  Object.entries(agg).forEach(([k, item]) => {
+    if (saveLater[k]) laterItems[k] = item;
+    else activeItems[k] = item;
+  });
+
+  const totalActive = Object.keys(activeItems).length;
+  const ckd = Object.keys(shopCk).filter(k => shopCk[k] && activeItems[k]).length;
+  const laterCount = Object.keys(laterItems).length;
+  sub.textContent = `${dates.length} meal${dates.length>1?'s':''} · ${totalActive - ckd} items remaining${laterCount ? ` · ${laterCount} saved for later` : ''}`;
 
   // Meal chips
   const chips = dates.map(ds => {
@@ -1271,12 +1397,32 @@ function renderGrocery() {
     return `<div class="meal-chip-row"><span class="chip-date">${label}</span><span class="chip-name">${short}</span></div>`;
   }).join('');
 
-  // Group by category
+  // Build active item rows by category
   const byCat = {};
-  Object.values(agg).forEach(item => {
+  Object.values(activeItems).forEach(item => {
     if (!byCat[item.c]) byCat[item.c] = [];
     byCat[item.c].push(item);
   });
+
+  function itemRow(item, isSavedLater = false) {
+    const k = `${item.c}|||${item.n}`;
+    const ck = shopCk[k];
+    const forLabel = item.meals.length > 1
+      ? `<span class="groc-for">${[...new Set(item.meals)].slice(0,2).join(', ')}${item.meals.length > 2 ? ' +more' : ''}</span>`
+      : `<span class="groc-for">${item.meals[0]}</span>`;
+    const saveLabel = isSavedLater ? 'Move back' : 'Save for later';
+    return `<div class="groc-item${ck?' ckd':''}${isSavedLater?' saved-later':''}" style="padding-right:8px;">
+      <div class="g-cb" onclick="toggleShop('${k.replace(/'/g,"\\'")}')">${ck?'✓':''}</div>
+      <div class="groc-item-r" onclick="toggleShop('${k.replace(/'/g,"\\'")}')">
+        <div class="groc-item-name">${item.n}</div>
+        <div class="groc-item-meta">
+          ${item.dates.length > 1 ? `<span class="groc-multi">×${item.dates.length} meals</span>` : `<span class="groc-qty">${item.q}</span>`}
+          ${forLabel}
+        </div>
+      </div>
+      <button class="groc-save-btn" onclick="toggleSaveLater('${k.replace(/'/g,"\\'")}')">${saveLabel}</button>
+    </div>`;
+  }
 
   let cols = '';
   CAT_ORDER.forEach(cat => {
@@ -1284,35 +1430,110 @@ function renderGrocery() {
     const items = byCat[cat].sort((a,b) => a.n.localeCompare(b.n));
     cols += `<div class="groc-sec">
       <div class="groc-sec-title">${cat}</div>
-      ${items.map(item => {
-        const k = `${item.c}|||${item.n}`;
-        const ck = shopCk[k];
-        // For items used in multiple meals, show meal names
-        const forLabel = item.meals.length > 1
-          ? `<span class="groc-for">${[...new Set(item.meals)].slice(0,2).join(', ')}${item.meals.length > 2 ? ' +more' : ''}</span>`
-          : `<span class="groc-for">${item.meals[0]}</span>`;
-        return `<div class="groc-item${ck?' ckd':''}" onclick="toggleShop('${k.replace(/'/g,"\\'")}')">
-          <div class="g-cb">${ck?'✓':''}</div>
-          <div class="groc-item-r">
-            <div class="groc-item-name">${item.n}</div>
-            <div class="groc-item-meta">
-              ${item.dates.length > 1 ? `<span class="groc-multi">×${item.dates.length} meals</span>` : `<span class="groc-qty">${item.q}</span>`}
-              ${forLabel}
-            </div>
-          </div>
-        </div>`;
-      }).join('')}
+      ${items.map(item => itemRow(item, false)).join('')}
     </div>`;
   });
 
-  body.innerHTML = `<div class="meal-chips">${chips}</div>${cols}<div style="height:24px;"></div>`;
+  // Saved for later section
+  let laterHtml = '';
+  if (laterCount > 0) {
+    const laterByCat = {};
+    Object.values(laterItems).forEach(item => {
+      if (!laterByCat[item.c]) laterByCat[item.c] = [];
+      laterByCat[item.c].push(item);
+    });
+    const laterRows = CAT_ORDER.map(cat => {
+      if (!laterByCat[cat]) return '';
+      return laterByCat[cat].sort((a,b)=>a.n.localeCompare(b.n)).map(item => itemRow(item, true)).join('');
+    }).join('');
+
+    laterHtml = `
+      <div class="groc-saved-header" onclick="toggleSavedSection()">
+        <span class="groc-saved-label">Saved for Later</span>
+        <span class="groc-saved-count">${laterCount}</span>
+        <span class="groc-saved-chevron${savedSectionOpen?' open':''}" id="savedChevron">▾</span>
+      </div>
+      <div id="savedItemsWrap" style="${savedSectionOpen?'':'display:none;'}opacity:0.65;">
+        ${laterRows}
+      </div>`;
+  }
+
+  body.innerHTML = `<div class="meal-chips">${chips}</div>${cols}${laterHtml}<div style="height:40px;"></div>`;
 }
 
 function toggleShop(k) { shopCk[k] = !shopCk[k]; save(); renderGrocery(); }
 function clearChecked() { shopCk = {}; save(); renderGrocery(); }
 function clearAllMeals() {
   if (!Object.keys(sel).length) return;
-  if (confirm('Clear all meal selections?')) { sel = {}; shopCk = {}; cooked = {}; save(); renderPlan(); renderGrocery(); updateMeta(); }
+  if (confirm('Clear all meal selections?')) {
+    sel = {}; shopCk = {}; cooked = {}; saveLater = {};
+    save(); renderPlan(); renderGrocery(); updateMeta();
+  }
+}
+
+function toggleSaveLater(k) {
+  saveLater[k] = !saveLater[k];
+  if (!saveLater[k]) delete saveLater[k];
+  save(); renderGrocery();
+}
+
+function toggleSavedSection() {
+  savedSectionOpen = !savedSectionOpen;
+  const wrap = document.getElementById('savedItemsWrap');
+  const chev = document.getElementById('savedChevron');
+  if (wrap) wrap.style.display = savedSectionOpen ? '' : 'none';
+  if (chev) chev.className = `groc-saved-chevron${savedSectionOpen?' open':''}`;
+}
+
+function shareGroceryList() {
+  const dates = Object.keys(sel).sort().filter(ds => !cooked[ds]);
+  if (!dates.length) { alert('No meals planned yet.'); return; }
+
+  const agg = {};
+  dates.forEach(ds => {
+    const m = MEALS[ds][sel[ds]];
+    m.ingredients.forEach(ing => {
+      const k = `${ing.c}|||${ing.n}`;
+      if (!agg[k]) agg[k] = { c: ing.c, n: ing.n, q: ing.q, count: 0 };
+      agg[k].count++;
+    });
+  });
+
+  // Only include items not checked off and not saved for later
+  const lines = ['🛒 GROCERY LIST\n'];
+  CAT_ORDER.forEach(cat => {
+    const items = Object.values(agg)
+      .filter(i => i.c === cat && !shopCk[`${i.c}|||${i.n}`] && !saveLater[`${i.c}|||${i.n}`])
+      .sort((a,b) => a.n.localeCompare(b.n));
+    if (!items.length) return;
+    lines.push(`\n${cat.toUpperCase()}`);
+    items.forEach(i => lines.push(`• ${i.n}${i.count > 1 ? ` (×${i.count})` : ''}`));
+  });
+
+  const text = lines.join('\n');
+
+  // Try native share sheet first (iOS), fall back to clipboard
+  if (navigator.share) {
+    navigator.share({ text }).catch(() => copyToClipboard(text));
+  } else if (navigator.clipboard) {
+    copyToClipboard(text);
+  } else {
+    // SMS deep link fallback
+    window.open('sms:?body=' + encodeURIComponent(text));
+  }
+}
+
+function copyToClipboard(text) {
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.querySelector('.share-btn');
+    if (btn) {
+      const orig = btn.textContent;
+      btn.textContent = 'Copied!';
+      setTimeout(() => { btn.textContent = orig; }, 2000);
+    }
+  }).catch(() => {
+    window.open('sms:?body=' + encodeURIComponent(text));
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1558,14 +1779,30 @@ function renderStats() {
     <div style="height:8px;"></div>
   `;
 }
-load();
-loadRecipeCache();
-renderPlan();
-renderFavs();
+// ═══════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════
+async function init() {
+  // Load localStorage immediately for instant render
+  load();
+  loadRecipeCache();
+  renderPlan();
+  renderFavs();
 
-// Start generating all recipes in the background after a short delay
-// so the UI loads first and generation doesn't block anything
-setTimeout(() => backgroundGenerateAll(), 1500);
+  // Then load from Supabase (overrides local if newer)
+  await supaLoad();
+  renderPlan();
+  renderFavs();
+  updateMeta();
+
+  // Subscribe to real-time changes (cross-device sync)
+  supaSubscribe();
+
+  // Start background recipe generation after UI is ready
+  setTimeout(() => backgroundGenerateAll(), 2000);
+}
+
+init();
 </script>
 </body>
 </html>

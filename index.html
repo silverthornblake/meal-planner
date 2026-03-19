@@ -400,6 +400,8 @@ body{background:var(--cream);color:var(--ink);font-family:'Barlow',sans-serif;fo
     </div>
   </div>
 </div>
+
+<div class="botbar">
   <button class="btab active" onclick="switchTab('plan',this)"><div class="btab-icon">📅</div><div class="btab-label">Plan</div></button>
   <button class="btab" onclick="switchTab('grocery',this)"><div class="btab-icon">🛒</div><div class="btab-label">Grocery</div></button>
   <button class="btab" onclick="switchTab('favs',this)"><div class="btab-icon">★</div><div class="btab-label">Favorites</div></button>
@@ -1347,8 +1349,8 @@ async function renderRecipeView(ds, mi) {
   const isFav = !!favs[meal.name];
   const pips = [1,2,3,4,5].map(n => `<div class="pip${n<=meal.diff?' on':''}"></div>`).join('');
 
-  const ingsHtml = meal.ingredients.map(ing =>
-    `<div class="ing-row"><span class="ing-name">${ing.n}</span><span class="ing-qty">${multiplyQty(ing.q, sv)}</span></div>`
+  const ingsHtml = meal.ingredients.map((ing, idx) =>
+    `<div class="ing-row"><span class="ing-name">${ing.n}</span><span class="ing-qty" data-idx="${idx}">${multiplyQty(ing.q, sv)}</span></div>`
   ).join('');
 
   // Check baked-in steps first, then localStorage cache
@@ -1386,7 +1388,7 @@ async function renderRecipeView(ds, mi) {
           <button class="serving-btn${sv===3?' active':''}" onclick="setServings('${ds}',3)">3×</button>
         </div>
         <div style="font-size:10px;color:var(--ink4);font-family:'Barlow Condensed',sans-serif;letter-spacing:0.15em;">
-          serves ${sv === 1 ? '2' : sv === 2 ? '4' : '6'}
+          <span class="serves-label">serves ${sv === 1 ? '2' : sv === 2 ? '4' : '6'}</span>
         </div>
       </div>
     </div>
@@ -1403,7 +1405,7 @@ async function renderRecipeView(ds, mi) {
     </div>
 
     <div class="recipe-sec">
-      <div class="recipe-sec-title">Ingredients${sv > 1 ? ` <span style="font-size:10px;color:var(--rust);font-weight:400;letter-spacing:0.1em;">(×${sv})</span>` : ''}</div>
+      <div class="recipe-sec-title ing-title">Ingredients${sv > 1 ? ` <span style="font-size:10px;color:var(--rust);font-weight:400;letter-spacing:0.1em;">(×${sv})</span>` : ''}</div>
       <div>${ingsHtml}</div>
     </div>
     <div class="recipe-sec" style="margin-top:16px;">
@@ -1435,7 +1437,30 @@ async function renderRecipeView(ds, mi) {
 function setServings(ds, mult) {
   servings[ds] = mult;
   save();
-  renderRecipeView(ds, sel[ds]);
+
+  const allMeals = getMealsForDay(ds);
+  const meal = allMeals[sel[ds]];
+  if (!meal) return;
+
+  // Update serving buttons active state
+  document.querySelectorAll('.serving-btn').forEach(btn => {
+    const btnMult = parseInt(btn.textContent);
+    btn.classList.toggle('active', btnMult === mult);
+  });
+
+  // Update serves label
+  const servesLabel = document.querySelector('.serving-row .serves-label');
+  if (servesLabel) servesLabel.textContent = `serves ${mult * 2}`;
+
+  // Update ingredient quantities in place
+  meal.ingredients.forEach((ing, idx) => {
+    const qEl = document.querySelector(`.ing-qty[data-idx="${idx}"]`);
+    if (qEl) qEl.textContent = multiplyQty(ing.q, mult);
+  });
+
+  // Update ingredients section title
+  const ingTitle = document.querySelector('.recipe-sec-title.ing-title');
+  if (ingTitle) ingTitle.innerHTML = `Ingredients${mult > 1 ? ` <span style="font-size:10px;color:var(--rust);font-weight:400;letter-spacing:0.1em;">(×${mult})</span>` : ''}`;
 }
 
 function showOptions() {

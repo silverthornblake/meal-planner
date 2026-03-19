@@ -248,10 +248,8 @@ body{background:var(--cream);color:var(--ink);font-family:'Barlow',sans-serif;fo
 .recipe-notes-input::placeholder{color:var(--ink4);}
 .recipe-notes-saved{font-size:10px;color:var(--sage);font-family:'Barlow Condensed',sans-serif;letter-spacing:0.15em;margin-top:4px;height:14px;}
 
-/* ── DAY DIFFICULTY BADGE ── */
-.day-time-flag{font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;padding:2px 6px;border-radius:2px;}
-.day-time-flag.relaxed{background:var(--ochre-lt);color:var(--ochre);}
-.day-time-flag.quick{background:var(--cream3);color:var(--ink4);}
+/* ── DAY QUIP ── */
+.day-quip{font-size:11px;color:var(--ink4);font-style:italic;margin-top:3px;line-height:1.3;}
 
 /* ── END OF RECIPES WARNING ── */
 .recipe-end-overlay{position:fixed;inset:0;background:rgba(26,24,20,0.72);z-index:500;display:flex;align-items:flex-end;justify-content:center;padding-bottom:env(safe-area-inset-bottom);}
@@ -949,12 +947,37 @@ function renderPlan() {
     const timeStr = meal ? (meal.time >= 120 ? `${Math.round(meal.time/60)}h` : `${meal.time}m`) : '';
     const diffLbl = meal ? ['Easy','Easy','Medium','Medium','Hard','Hard'][meal.diff] : '';
 
-    // Smart time flag — Thu/Fri/Sat/Sun = relaxed (longer cooks ok), Mon–Wed = weeknight
-    const dow = d.getDay(); // 0=Sun,1=Mon,2=Tue,3=Wed,4=Thu,5=Fri,6=Sat
-    const isRelaxedNight = dow === 0 || dow === 4 || dow === 5 || dow === 6; // Sun,Thu,Fri,Sat
-    const timeFlagHtml = !isSel ? (isRelaxedNight
-      ? `<span class="day-time-flag relaxed">Leisurely OK</span>`
-      : `<span class="day-time-flag quick">Under 1h</span>`) : '';
+    // Rotating one-liners for empty day slots — deterministic by date so they don't shift on re-render
+    const QUIPS = [
+      "Food isn't burnt. It's charred.",
+      "Some nights are Chick-fil-A nights.",
+      "We don't eat bad food.",
+      "Dinner doesn't make itself. Unfortunately.",
+      "A meal planned is a meal earned.",
+      "The fridge isn't going to cook itself.",
+      "Whitney's already thinking about it.",
+      "Gordon Ramsay wishes he had this app.",
+      "No decisions after 6pm. Pick now.",
+      "Future you will be grateful.",
+      "Leftovers are just planned-overs.",
+      "Olive oil. Always olive oil.",
+      "This slot is judging you.",
+      "A refrigerator full of possibility.",
+      "Dinner: the daily unsolved mystery.",
+      "The best meal is a decided meal.",
+      "Mise en place starts with picking a meal.",
+      "A good dinner is a love language.",
+      "Every great meal starts with a tap.",
+      "Don't make hungry-you make this decision.",
+      "Plan it now. Thank yourself at 7pm.",
+      "United Supermarket is waiting.",
+      "What would Julia Child do?",
+      "Two people. One dinner. Infinite excuses.",
+      "No shame in the Rotisserie game.",
+      "The garlic is already minced in your heart.",
+    ];
+    const quip = QUIPS[parseInt(ds.replace(/-/g,'')) % QUIPS.length];
+    const quipHtml = !isSel && hasMeals ? `<div class="day-quip">${quip}</div>` : '';
 
     html += `<div class="day-row${isSel?' selected':''}${isToday?' today-row':''}${isCooked?' cooked-row':''}"
       id="dayrow-${ds}"
@@ -979,7 +1002,7 @@ function renderPlan() {
                  ${hasNote ? `<span class="day-meta-pill" style="color:var(--ink4)">📝</span>` : ''}
                </div>`
             : hasMeals
-              ? `<div class="day-empty-label">Tap to choose dinner</div><div>${timeFlagHtml}</div>`
+              ? `<div class="day-empty-label">Tap to choose dinner</div>${quipHtml}`
               : `<div class="day-empty-label" style="opacity:0.4;">No options available</div>`
         }
       </div>
@@ -1116,12 +1139,9 @@ function renderOptionsView(ds) {
   const d = new Date(ds + 'T12:00:00');
   const dow = d.getDay();
   const isRelaxedNight = dow === 0 || dow === 4 || dow === 5 || dow === 6;
-  const smartLabel = isRelaxedNight
-    ? `<span class="day-time-flag relaxed" style="margin-left:8px;">Leisurely OK</span>`
-    : `<span class="day-time-flag quick" style="margin-left:8px;">Weeknight — under 1h ideal</span>`;
 
   let html = `<div class="opts-wrap">
-    <div class="opts-hdr" style="display:flex;align-items:center;">Choose your dinner${smartLabel}</div>
+    <div class="opts-hdr">Choose your dinner</div>
     <button class="opts-refresh-btn" onclick="refreshOptions('${ds}')">
       <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M12 7A5 5 0 112 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M12 3v4h-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
       Refresh Options

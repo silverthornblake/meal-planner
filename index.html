@@ -1217,44 +1217,14 @@ function stepsHtmlFromCache(steps) {
 }
 
 async function fetchStepsFromAPI(meal) {
-  // Check baked-in steps first — instant, no API needed
+  // All 194 recipe steps are baked into RECIPE_STEPS above.
+  // This function is kept as a fallback but should never be called
+  // under normal app use — RECIPE_STEPS covers everything.
   if (RECIPE_STEPS[meal.name] && RECIPE_STEPS[meal.name].length > 0) {
     return RECIPE_STEPS[meal.name];
   }
-  const ingredientList = meal.ingredients.map(i => `${i.n}: ${i.q}`).join(', ');
-
-  // 20s timeout — Netlify functions have a 10s default but we give headroom
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 20000);
-
-  try {
-    const response = await fetch('/.netlify/functions/recipe', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      signal: controller.signal,
-      body: JSON.stringify({
-        mealName: meal.name,
-        cuisine: meal.cuisine,
-        time: meal.time,
-        diff: meal.diff,
-        ingredients: ingredientList
-      })
-    });
-    clearTimeout(timer);
-
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(`Function returned ${response.status}: ${err.error || 'unknown error'}`);
-    }
-
-    const data = await response.json();
-    const text = data.content?.[0]?.text || '[]';
-    const clean = text.replace(/```json|```/g, '').trim();
-    return JSON.parse(clean);
-  } catch (err) {
-    clearTimeout(timer);
-    throw err;
-  }
+  // Fallback: return a placeholder rather than hitting the API
+  return [{"title":"Recipe steps unavailable","text":"Steps for this recipe aren't cached yet. Try removing and re-adding this meal.","time":null}];
 }
 
 // ─── BACKGROUND BULK GENERATOR ───────────────────────────────
@@ -2293,8 +2263,8 @@ async function init() {
   // Subscribe to real-time changes (cross-device sync)
   supaSubscribe();
 
-  // Recipe steps load on-demand only when you tap a recipe.
-  // No background bulk generation — avoids overwhelming mobile connections.
+  // Recipe steps are baked into RECIPE_STEPS — no API calls needed.
+  // Background generator permanently disabled.
   // setTimeout(() => backgroundGenerateAll(), 2000);
 }
 

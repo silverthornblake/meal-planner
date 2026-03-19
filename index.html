@@ -769,6 +769,7 @@ let saveLater = {};   // { "2026-03-01": true } — meal-level save for later
 let servings = {};    // { "2026-03-01": 2 } — serving multiplier (1,2,3)
 let refreshed = {};   // { "2026-03-01": [4,5,6] } — backup option indices shown
 let notes = {};       // { "2026-03-01": "text" } — per-day recipe notes
+let customMeals = {}; // { "2026-03-01": {...meal} } — meals assigned directly from favs/history
 let activeDate = null;
 let viewingRecipe = false;
 let savedSectionOpen = false;
@@ -804,6 +805,7 @@ async function supaLoad() {
       servings  = r.servings   || {};
       refreshed = r.refreshed  || {};
       notes     = r.notes      || {};
+      customMeals = r.custom_meals || {};
     }
     setSyncStatus('ok');
   } catch(e) {
@@ -811,6 +813,7 @@ async function supaLoad() {
       const d = JSON.parse(localStorage.getItem('dp_v5') || '{}');
       sel = d.sel||{}; shopCk = d.shopCk||{}; favs = d.favs||{}; cooked = d.cooked||{};
       saveLater = d.saveLater||{}; servings = d.servings||{}; refreshed = d.refreshed||{};
+      notes = d.notes||{}; customMeals = d.customMeals||{};
     } catch(_){}
     setSyncStatus('error');
   }
@@ -830,7 +833,7 @@ async function supaSync() {
       },
       body: JSON.stringify({
         sel, shop_ck: shopCk, cooked, favs, save_later: saveLater,
-        servings, refreshed, notes,
+        servings, refreshed, notes, custom_meals: customMeals,
         updated_at: new Date().toISOString()
       })
     });
@@ -842,7 +845,7 @@ async function supaSync() {
 }
 
 function save() {
-  localStorage.setItem('dp_v5', JSON.stringify({ sel, shopCk, favs, cooked, saveLater, servings, refreshed, notes }));
+  localStorage.setItem('dp_v5', JSON.stringify({ sel, shopCk, favs, cooked, saveLater, servings, refreshed, notes, customMeals }));
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => supaSync(), 800);
 }
@@ -852,7 +855,7 @@ function load() {
     const d = JSON.parse(localStorage.getItem('dp_v5') || '{}');
     sel = d.sel||{}; shopCk = d.shopCk||{}; favs = d.favs||{}; cooked = d.cooked||{};
     saveLater = d.saveLater||{}; servings = d.servings||{}; refreshed = d.refreshed||{};
-    notes = d.notes||{};
+    notes = d.notes||{}; customMeals = d.customMeals||{};
   } catch(e){}
 }
 
@@ -872,6 +875,7 @@ async function supaSubscribe() {
         servings  = r.servings   || {};
         refreshed = r.refreshed  || {};
         notes     = r.notes      || {};
+      customMeals = r.custom_meals || {};
         localStorage.setItem('dp_v5', JSON.stringify({ sel, shopCk, favs, cooked, saveLater, servings, refreshed, notes }));
         renderPlan();
         renderGrocery();
@@ -1102,6 +1106,10 @@ function getMealsForDay(ds) {
   const base = MEALS[cyclicDs] || [];
   const extra = refreshed[ds] || [];
   const backups = extra.map(i => BACKUP_MEALS[i]).filter(Boolean);
+  // If a meal was directly assigned from favs/history, prepend it as option 0
+  if (customMeals[ds]) {
+    return [customMeals[ds], ...base, ...backups];
+  }
   return [...base, ...backups];
 }
 
@@ -1567,6 +1575,7 @@ function removeRecipe(ds) {
   delete saveLater[ds];
   delete refreshed[ds];
   delete notes[ds];
+  delete customMeals[ds];
   save();
   closeSlide();
   renderGrocery();
@@ -1789,39 +1798,32 @@ function openAssignSheetFromMeal(mealName) {
   document.getElementById('assignOverlay').style.display = 'flex';
 }
 
-// Assign a meal by name to a specific day — injects as backup if needed
+// Assign a meal by name to a specific day — always works regardless of rotation
 function assignMealObjectToDay(mealName, toDs) {
-  const targetMeals = getMealsForDay(toDs);
+  // Find the full meal object from favs, MEALS pool, or BACKUP_MEALS
+  let meal = favs[mealName];
 
-  // Check if it's already a natural option for this day
-  let targetIdx = targetMeals.findIndex(m => m.name === mealName);
-
-  if (targetIdx === -1) {
-    // Check BACKUP_MEALS
-    const backupIdx = BACKUP_MEALS.findIndex(b => b.name === mealName);
-    if (backupIdx !== -1) {
-      const current = refreshed[toDs] || [];
-      if (!current.includes(backupIdx)) refreshed[toDs] = [...current, backupIdx];
-      const updated = getMealsForDay(toDs);
-      targetIdx = updated.findIndex(m => m.name === mealName);
-    } else {
-      // From MEALS rotation — find which rotation slot has it
-      const matchingDate = MEAL_DATES.find(md =>
-        MEALS[md] && MEALS[md].some(m => m.name === mealName)
-      );
-      if (matchingDate) {
-        const mealIdx = MEALS[matchingDate].findIndex(m => m.name === mealName);
-        // We can't change which date this day maps to, so add it as a custom injected backup
-        // For now, fall back to option 0 of this day
-        targetIdx = 0;
-      } else {
-        targetIdx = 0;
-      }
+  if (!meal) {
+    // Search BACKUP_MEALS
+    meal = BACKUP_MEALS.find(m => m.name === mealName);
+  }
+  if (!meal) {
+    // Search all MEALS dates
+    for (const md of MEAL_DATES) {
+      const found = MEALS[md].find(m => m.name === mealName);
+      if (found) { meal = found; break; }
     }
   }
+  if (!meal) {
+    console.warn('Could not find meal:', mealName);
+    return;
+  }
 
-  sel[toDs] = Math.max(0, targetIdx);
+  // Store it directly — getMealsForDay will prepend it as option 0
+  customMeals[toDs] = { ...meal };
+  sel[toDs] = 0;
   save();
+
   document.getElementById('assignOverlay').style.display = 'none';
   if (document.getElementById('slidePanel').classList.contains('open')) closeSlide();
 
@@ -1955,7 +1957,7 @@ function clearChecked() { shopCk = {}; save(); renderGrocery(); }
 function clearAllMeals() {
   if (!Object.keys(sel).length) return;
   if (confirm('Clear all meal selections?')) {
-    sel = {}; shopCk = {}; cooked = {}; saveLater = {}; servings = {}; refreshed = {}; notes = {};
+    sel = {}; shopCk = {}; cooked = {}; saveLater = {}; servings = {}; refreshed = {}; notes = {}; customMeals = {};
     save(); renderPlan(); renderGrocery(); updateMeta();
   }
 }

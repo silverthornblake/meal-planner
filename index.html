@@ -251,16 +251,7 @@ body{background:var(--cream);color:var(--ink);font-family:'Barlow',sans-serif;fo
 /* ── DAY QUIP ── */
 .day-quip{font-size:11px;color:var(--ink4);font-style:italic;margin-top:3px;line-height:1.3;}
 
-/* ── END OF RECIPES WARNING ── */
-.recipe-end-overlay{position:fixed;inset:0;background:rgba(26,24,20,0.72);z-index:500;display:flex;align-items:flex-end;justify-content:center;padding-bottom:env(safe-area-inset-bottom);}
-.recipe-end-sheet{background:var(--cream);border-radius:12px 12px 0 0;padding:28px 24px 32px;width:100%;max-width:480px;box-shadow:0 -8px 40px rgba(0,0,0,0.25);}
-.recipe-end-icon{font-size:36px;margin-bottom:12px;}
-.recipe-end-title{font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink);margin-bottom:8px;}
-.recipe-end-body{font-size:13px;color:var(--ink3);line-height:1.6;margin-bottom:20px;}
-.recipe-end-body strong{color:var(--rust);}
-.recipe-end-actions{display:flex;flex-direction:column;gap:10px;}
-.recipe-end-btn-primary{background:var(--rust);color:white;border:none;padding:13px;border-radius:4px;font-family:'Barlow',sans-serif;font-size:13px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;cursor:pointer;width:100%;}
-.recipe-end-btn-secondary{background:none;color:var(--ink3);border:1.5px solid var(--border);padding:11px;border-radius:4px;font-family:'Barlow',sans-serif;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;cursor:pointer;width:100%;}
+
 .serving-row{display:flex;align-items:center;gap:0;padding:12px 16px;border-bottom:1px solid var(--border2);}
 .serving-label{font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;color:var(--ink4);flex:1;}
 .serving-btns{display:flex;gap:6px;}
@@ -328,6 +319,21 @@ body{background:var(--cream);color:var(--ink);font-family:'Barlow',sans-serif;fo
 .ing-freq-grid{display:flex;flex-wrap:wrap;gap:6px;}
 .ing-freq-chip{display:flex;align-items:center;gap:5px;background:white;border:1.5px solid var(--border);border-radius:20px;padding:5px 10px 5px 8px;font-size:12px;color:var(--ink2);}
 .ing-freq-count{font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;background:var(--rust);color:white;border-radius:8px;padding:1px 5px;letter-spacing:0.05em;}
+
+/* ── COOKED HISTORY ── */
+.history-toggle{display:flex;align-items:center;gap:8px;cursor:pointer;padding:14px 16px 10px;border-top:1px solid var(--border2);margin-top:4px;background:none;border-left:none;border-right:none;border-bottom:none;width:100%;text-align:left;}
+.history-toggle-label{font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:700;letter-spacing:0.3em;text-transform:uppercase;color:var(--ink);}
+.history-toggle-count{font-family:'Barlow Condensed',sans-serif;font-size:10px;background:var(--sage);color:white;padding:2px 8px;border-radius:10px;font-weight:700;}
+.history-toggle-chevron{font-size:11px;color:var(--ink4);margin-left:auto;transition:transform 0.2s;}
+.history-toggle-chevron.open{transform:rotate(180deg);}
+.history-card{background:white;border:1.5px solid var(--border);border-radius:4px;margin:0 16px 8px;overflow:hidden;}
+.history-card-top{padding:12px 14px 10px;cursor:pointer;display:flex;align-items:flex-start;gap:10px;}
+.history-card-body{flex:1;}
+.history-card-date{font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:0.25em;text-transform:uppercase;color:var(--rust);margin-bottom:3px;}
+.history-card-name{font-size:14px;font-weight:500;color:var(--ink);line-height:1.3;margin-bottom:5px;}
+.history-card-meta{display:flex;gap:10px;}
+.history-card-stat{font-family:'Barlow Condensed',sans-serif;font-size:11px;color:var(--ink3);}
+.history-card-note{padding:0 14px 12px;font-size:12px;color:var(--ink3);font-style:italic;line-height:1.5;border-top:1px solid var(--border2);padding-top:10px;}
 
 /* streak */
 .streak-display{display:flex;align-items:center;gap:16px;background:white;border:1.5px solid var(--border);border-radius:6px;padding:16px;}
@@ -405,17 +411,6 @@ body{background:var(--cream);color:var(--ink);font-family:'Barlow',sans-serif;fo
   <div class="slide-body" id="slideBody"></div>
 </div>
 
-<div id="recipeEndOverlay" class="recipe-end-overlay" style="display:none;" onclick="dismissEndWarning(event)">
-  <div class="recipe-end-sheet">
-    <div class="recipe-end-icon">📅</div>
-    <div class="recipe-end-title">Running Low on Recipes</div>
-    <div class="recipe-end-body" id="recipeEndBody">You have <strong>5 days</strong> of recipes left after today. Time to generate a new batch so you don't hit a wall mid-week.</div>
-    <div class="recipe-end-actions">
-      <button class="recipe-end-btn-primary" onclick="openRecipeGenerator()">Generate New Recipes →</button>
-      <button class="recipe-end-btn-secondary" onclick="closeEndWarning()">Remind Me Later</button>
-    </div>
-  </div>
-</div>
 
 <div class="botbar">
   <button class="btab active" onclick="switchTab('plan',this)"><div class="btab-icon">📅</div><div class="btab-label">Plan</div></button>
@@ -1027,56 +1022,8 @@ function openDay(ds) {
   renderSlideBody();
   document.getElementById('slidePanel').classList.add('open');
   document.body.style.overflow = 'hidden';
-  checkRecipeEndWarning(ds);
 }
 
-// ── RECIPE END WARNING ────────────────────────────────────────
-const LAST_MEAL_DATE = '2026-04-30'; // last date in MEALS data
-const WARN_DAYS_BEFORE = 5;
-
-function checkRecipeEndWarning(ds) {
-  const lastDate = new Date(LAST_MEAL_DATE + 'T12:00:00');
-  const tappedDate = new Date(ds + 'T12:00:00');
-  const today = new Date(); today.setHours(0,0,0,0);
-
-  // Days remaining from today until last recipe date
-  const msPerDay = 1000 * 60 * 60 * 24;
-  const daysRemaining = Math.round((lastDate - today) / msPerDay);
-
-  // Show warning when within WARN_DAYS_BEFORE days of running out
-  // and user is tapping into the final stretch
-  const daysUntilTapped = Math.round((tappedDate - today) / msPerDay);
-
-  if (daysRemaining <= WARN_DAYS_BEFORE && daysRemaining >= 0) {
-    const warningKey = `recipeEndWarning_${LAST_MEAL_DATE}`;
-    const dismissed = sessionStorage.getItem(warningKey);
-    if (!dismissed) {
-      const dayWord = daysRemaining === 1 ? 'day' : 'days';
-      document.getElementById('recipeEndBody').innerHTML =
-        `You have <strong>${daysRemaining} ${dayWord}</strong> of recipes left. Time to generate a new batch so you don't hit a wall mid-week.`;
-      document.getElementById('recipeEndOverlay').style.display = 'flex';
-    }
-  }
-}
-
-function closeEndWarning() {
-  const warningKey = `recipeEndWarning_${LAST_MEAL_DATE}`;
-  sessionStorage.setItem(warningKey, '1');
-  document.getElementById('recipeEndOverlay').style.display = 'none';
-}
-
-function dismissEndWarning(event) {
-  // Only dismiss if clicking the dark backdrop, not the sheet
-  if (event && event.target === document.getElementById('recipeEndOverlay')) {
-    closeEndWarning();
-  }
-}
-
-function openRecipeGenerator() {
-  document.getElementById('recipeEndOverlay').style.display = 'none';
-  // Open in a new tab — user comes back to Claude to generate a new index.html
-  window.open('https://claude.ai', '_blank');
-}
 
 function renderSlideBody() {
   const ds = activeDate;
@@ -1106,10 +1053,29 @@ const BACKUP_MEALS = [
   {name:"One-Pan Chicken & Vegetables",cuisine:"Classic",cal:480,protein:50,time:45,diff:1,ingredients:[{n:"Chicken thighs, bone-in",q:"4",c:"Meat"},{n:"Carrots",q:"3",c:"Produce"},{n:"Broccoli",q:"1 head",c:"Produce"},{n:"Bell peppers",q:"2",c:"Produce"},{n:"Garlic",q:"4 cloves",c:"Produce"},{n:"Olive oil",q:"3 tbsp",c:"Pantry"},{n:"Italian seasoning",q:"2 tsp",c:"Pantry"},{n:"Lemon",q:"1",c:"Produce"}]}
 ];
 
+// ═══════════════════════════════════════════════════════════════
+// RECIPE ROTATION — maps any date to a MEALS entry by cycling
+// through all 61 available recipe dates. The app never runs out.
+// ═══════════════════════════════════════════════════════════════
+const MEAL_DATES = Object.keys(MEALS).sort(); // sorted array of all 61 dates
+const CYCLE_ORIGIN = new Date('2026-03-01T12:00:00'); // anchor date
+
+function getCyclicMealDate(ds) {
+  const d = new Date(ds + 'T12:00:00');
+  const dayOffset = Math.round((d - CYCLE_ORIGIN) / (1000 * 60 * 60 * 24));
+  // Cycle through MEAL_DATES, but use a shuffled order so each cycle feels different
+  // Shuffle deterministically using a seed based on which cycle we're on
+  const cycle = Math.floor(dayOffset / MEAL_DATES.length);
+  const posInCycle = ((dayOffset % MEAL_DATES.length) + MEAL_DATES.length) % MEAL_DATES.length;
+  // Rotate the date list by cycle number so each 61-day period uses a different order
+  const rotated = [...MEAL_DATES.slice(cycle % MEAL_DATES.length), ...MEAL_DATES.slice(0, cycle % MEAL_DATES.length)];
+  return rotated[posInCycle];
+}
+
 function getMealsForDay(ds) {
-  const base = MEALS[ds] || [];
+  const cyclicDs = getCyclicMealDate(ds);
+  const base = MEALS[cyclicDs] || [];
   const extra = refreshed[ds] || [];
-  // extra is array of BACKUP_MEALS indices
   const backups = extra.map(i => BACKUP_MEALS[i]).filter(Boolean);
   return [...base, ...backups];
 }
@@ -1923,8 +1889,8 @@ function renderStats() {
 
   // Collect ALL planned meals (all time, not just 14-day window)
   const allSelDates = Object.keys(sel).sort();
-  const allMeals = allSelDates.map(ds => MEALS[ds][sel[ds]]).filter(Boolean);
-  const cookedMeals = allSelDates.filter(ds => cooked[ds]).map(ds => MEALS[ds][sel[ds]]).filter(Boolean);
+  const allMeals = allSelDates.map(ds => { const m = getMealsForDay(ds); return m[sel[ds]]; }).filter(Boolean);
+  const cookedMeals = allSelDates.filter(ds => cooked[ds]).map(ds => { const m = getMealsForDay(ds); return m[sel[ds]]; }).filter(Boolean);
 
   if (!allMeals.length) {
     sub.textContent = 'Plan some meals to see your stats';
@@ -2126,6 +2092,57 @@ function renderStats() {
 
     <div style="height:8px;"></div>
   `;
+
+  // ── COOKED HISTORY ───────────────────────────────────────────
+  const cookedDates = Object.keys(sel)
+    .filter(ds => cooked[ds] && sel[ds] !== undefined)
+    .sort((a,b) => b.localeCompare(a)); // most recent first
+
+  if (cookedDates.length > 0) {
+    const historyOpen = window._historyOpen || false;
+    body.innerHTML += `
+      <button class="history-toggle" onclick="toggleHistorySection()">
+        <span class="history-toggle-label">Cooked History</span>
+        <span class="history-toggle-count">${cookedDates.length}</span>
+        <span class="history-toggle-chevron${historyOpen?' open':''}" id="historyChevron">▾</span>
+      </button>
+      <div id="historyList" style="${historyOpen?'':'display:none;'}padding-bottom:16px;">
+        ${cookedDates.map(ds => {
+          const allMeals = getMealsForDay(ds);
+          const meal = allMeals[sel[ds]];
+          if (!meal) return '';
+          const d = new Date(ds + 'T12:00:00');
+          const dateLabel = d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric', year:'numeric' });
+          const timeStr = meal.time >= 120 ? `${Math.round(meal.time/60)}h ${meal.time%60>0?meal.time%60+'m':''}`.trim() : `${meal.time} min`;
+          const note = notes[ds] ? notes[ds].trim() : '';
+          return `<div class="history-card">
+            <div class="history-card-top">
+              <div class="history-card-body">
+                <div class="history-card-date">${dateLabel}</div>
+                <div class="history-card-name">${meal.name}</div>
+                <div class="history-card-meta">
+                  <span class="history-card-stat">${meal.cuisine}</span>
+                  <span class="history-card-stat">${meal.cal} cal/person</span>
+                  <span class="history-card-stat">${timeStr}</span>
+                </div>
+              </div>
+            </div>
+            ${note ? `<div class="history-card-note">📝 ${note}</div>` : ''}
+          </div>`;
+        }).join('')}
+      </div>
+      <div style="height:16px;"></div>`;
+  } else {
+    body.innerHTML += `<div style="height:8px;"></div>`;
+  }
+}
+
+function toggleHistorySection() {
+  window._historyOpen = !window._historyOpen;
+  const list = document.getElementById('historyList');
+  const chev = document.getElementById('historyChevron');
+  if (list) list.style.display = window._historyOpen ? '' : 'none';
+  if (chev) chev.className = `history-toggle-chevron${window._historyOpen?' open':''}`;
 }
 // ═══════════════════════════════════════════════════════════════
 // INIT

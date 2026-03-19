@@ -1762,10 +1762,29 @@ function openFavRecipeReadOnly(meal) {
 
 // Open the assign sheet using a meal name (works from both favs and history)
 function openAssignSheetFromMeal(mealName) {
-  const meal = favs[mealName] || Object.values(favs).find(m => m.name === mealName);
-  if (!meal) return;
+  // Find the meal from any source — favs, cooked history, BACKUP_MEALS, or MEALS pool
+  let meal = favs[mealName];
 
-  document.getElementById('assignTitle').textContent = mealName.length > 32 ? mealName.slice(0,30)+'…' : mealName;
+  if (!meal) {
+    // Check cooked history
+    const cookedDs = Object.keys(sel).find(ds => {
+      if (!cooked[ds]) return false;
+      const meals = getMealsForDay(ds);
+      return meals[sel[ds]]?.name === mealName;
+    });
+    if (cookedDs) meal = getMealsForDay(cookedDs)[sel[cookedDs]];
+  }
+  if (!meal) meal = BACKUP_MEALS.find(m => m.name === mealName);
+  if (!meal) {
+    for (const md of MEAL_DATES) {
+      const found = (MEALS[md] || []).find(m => m.name === mealName);
+      if (found) { meal = found; break; }
+    }
+  }
+  if (!meal) { console.warn('openAssignSheetFromMeal: meal not found:', mealName); return; }
+
+  const displayName = mealName.length > 32 ? mealName.slice(0,30)+'…' : mealName;
+  document.getElementById('assignTitle').textContent = displayName;
   document.getElementById('assignSub').textContent = 'Pick a day to add this to your plan';
 
   const today = new Date(); today.setHours(0,0,0,0);

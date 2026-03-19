@@ -437,10 +437,10 @@ body{background:var(--cream);color:var(--ink);font-family:'Barlow',sans-serif;fo
 
 
 <div class="botbar">
-  <button class="btab active" onclick="switchTab('plan',this)"><div class="btab-icon">📅</div><div class="btab-label">Plan</div></button>
-  <button class="btab" onclick="switchTab('grocery',this)"><div class="btab-icon">🛒</div><div class="btab-label">Grocery</div></button>
-  <button class="btab" onclick="switchTab('favs',this)"><div class="btab-icon">★</div><div class="btab-label">Favorites</div></button>
-  <button class="btab" onclick="switchTab('stats',this)"><div class="btab-icon">📊</div><div class="btab-label">Stats</div></button>
+  <button class="btab active" data-tab="plan" onclick="switchTab('plan',this)"><div class="btab-icon">📅</div><div class="btab-label">Plan</div></button>
+  <button class="btab" data-tab="grocery" onclick="switchTab('grocery',this)"><div class="btab-icon">🛒</div><div class="btab-label">Grocery</div></button>
+  <button class="btab" data-tab="favs" onclick="switchTab('favs',this)"><div class="btab-icon">★</div><div class="btab-label">Favorites</div></button>
+  <button class="btab" data-tab="stats" onclick="switchTab('stats',this)"><div class="btab-icon">📊</div><div class="btab-label">Stats</div></button>
 </div>
 
 <script>
@@ -1039,6 +1039,7 @@ function renderPlan() {
 // DAY SLIDE
 // ═══════════════════════════════════════════════════════════════
 function openDay(ds) {
+  slideOriginTab = 'plan';
   activeDate = ds;
   const d = new Date(ds + 'T12:00:00');
   document.getElementById('slideDate').textContent = d.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
@@ -1571,14 +1572,25 @@ function removeRecipe(ds) {
   renderGrocery();
 }
 
+let slideOriginTab = 'plan'; // tracks which tab opened the slide panel
+
 function closeSlide() {
   document.getElementById('slidePanel').classList.remove('open');
   document.body.style.overflow = '';
-  const wasDate = activeDate;
   activeDate = null;
   viewingRecipe = false;
-  // Re-render plan so day row reflects any selection changes
+
+  const returnTab = slideOriginTab || 'plan';
+  slideOriginTab = 'plan';
+
+  // Always re-render plan in background
   renderPlan();
+
+  // Return to the tab that launched the slide
+  const tabBtn = document.querySelector(`.btab[data-tab="${returnTab}"]`);
+  if (tabBtn && returnTab !== 'plan') {
+    switchTab(returnTab, tabBtn);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1633,22 +1645,27 @@ function renderFavs() {
     const timeStr = m.time >= 120 ? `${Math.round(m.time/60)}h` : `${m.time}m`;
     const diffLbl = ['Easy','Easy','Medium','Medium','Hard','Hard'][m.diff] || 'Medium';
     const keyIngs = (m.ingredients||[]).slice(0,5).map(i => `<span class="ing-chip">${i.n}</span>`).join('');
+    const safeName = m.name.replace(/'/g,"\\'").replace(/"/g,'&quot;');
     return `<div class="fav-card">
-      <div class="fav-card-top">
+      <div class="fav-card-top" onclick="openFavRecipe('${safeName}')">
         <div class="fav-body">
           <div class="fav-cuisine">${m.cuisine} · saved ${m.savedAt}</div>
           <div class="fav-name">${m.name}</div>
           <div class="fav-stats">
-            <span class="fav-stat"><strong>${m.cal}</strong> cal</span>
+            <span class="fav-stat"><strong>${m.cal}</strong> cal/person</span>
             <span class="fav-stat"><strong>${m.protein}g</strong> protein</span>
             <span class="fav-stat"><strong>${timeStr}</strong></span>
             <span class="fav-stat">${diffLbl}</span>
           </div>
         </div>
-        <button class="fav-rm" onclick="removeFav('${m.name.replace(/'/g,"\\'")}')">★</button>
+        <div style="color:var(--ink4);font-size:18px;align-self:center;">›</div>
       </div>
       <div style="height:1px;background:var(--cream2);margin:0 14px;"></div>
       <div style="padding:8px 14px 10px;display:flex;flex-wrap:wrap;gap:4px;">${keyIngs}</div>
+      <div class="history-card-action">
+        <button class="recipe-action-btn" style="flex:none;padding:7px 12px;font-size:11px;" onclick="removeFav('${safeName}')">Remove ★</button>
+        <button class="history-card-btn" onclick="openAssignSheetFromMeal('${safeName}')">Add to Day</button>
+      </div>
     </div>`;
   }).join('');
 }
@@ -1657,6 +1674,170 @@ function removeFav(name) {
   delete favs[name];
   save();
   renderFavs();
+}
+
+// Open a favorite recipe in the slide panel for reading
+function openFavRecipe(mealName) {
+  const meal = favs[mealName];
+  if (!meal) return;
+  slideOriginTab = 'favs';
+
+  // Find a date that has this meal so we can use renderRecipeView properly
+  // Try to find an existing sel date with this meal name
+  const existingDs = Object.keys(sel).find(ds => {
+    const meals = getMealsForDay(ds);
+    return meals[sel[ds]]?.name === mealName;
+  });
+
+  if (existingDs) {
+    // Great — open it normally
+    activeDate = existingDs;
+    viewingRecipe = true;
+    const d = new Date(existingDs + 'T12:00:00');
+    document.getElementById('slideDate').textContent =
+      d.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
+    document.getElementById('slidePanel').classList.add('open');
+    document.body.style.overflow = 'hidden';
+    renderRecipeView(existingDs, sel[existingDs]);
+  } else {
+    // Meal isn't on the current plan — show a read-only recipe card
+    openFavRecipeReadOnly(meal);
+  }
+}
+
+// Show a recipe card for a favorite meal that isn't currently on the plan
+function openFavRecipeReadOnly(meal) {
+  activeDate = '__fav__';
+  viewingRecipe = true;
+  document.getElementById('slideDate').textContent = `★ ${meal.cuisine}`;
+  document.getElementById('slidePanel').classList.add('open');
+  document.body.style.overflow = 'hidden';
+
+  const body = document.getElementById('slideBody');
+  const timeStr = meal.time >= 120 ? `${Math.round(meal.time/60)}h ${meal.time%60>0?meal.time%60+'m':''}`.trim() : `${meal.time} min`;
+  const diffLbl = ['Easy','Easy','Medium','Medium','Hard','Hard'][meal.diff] || 'Medium';
+  const pips = [1,2,3,4,5].map(n => `<div class="pip${n<=meal.diff?' on':''}"></div>`).join('');
+  const ingsHtml = (meal.ingredients||[]).map(ing =>
+    `<div class="ing-row"><span class="ing-name">${ing.n}</span><span class="ing-qty">${ing.q}</span></div>`
+  ).join('');
+  const cached = RECIPE_STEPS[meal.name] || recipeCache[meal.name];
+  const stepsHtml = cached ? stepsHtmlFromCache(cached) : `<div style="font-size:13px;color:var(--ink4);padding:8px 0;">Steps available when this meal is on your plan.</div>`;
+  const safeName = meal.name.replace(/'/g,"\\'");
+
+  body.innerHTML = `<div class="recipe-wrap">
+    <div class="recipe-hero">
+      <div class="recipe-eyebrow">${meal.cuisine}</div>
+      <div class="recipe-title">${meal.name}</div>
+      <button class="recipe-fav on" onclick="removeFav('${safeName}');closeSlide()">★</button>
+    </div>
+    <div class="recipe-stats">
+      <div class="rstat"><div class="rstat-val">${meal.cal}</div><div class="rstat-lbl">Cal / person</div></div>
+      <div class="rstat"><div class="rstat-val">${meal.protein}g</div><div class="rstat-lbl">Protein / person</div></div>
+      <div class="rstat"><div class="rstat-val">${timeStr}</div><div class="rstat-lbl">Cook Time</div></div>
+      <div class="rstat"><div class="diff-pips">${pips}</div><div class="rstat-lbl">${diffLbl}</div></div>
+    </div>
+    <div class="recipe-actions">
+      <button class="history-card-btn" style="flex:1;padding:11px;" onclick="openAssignSheetFromMeal('${safeName}')">Add to Day →</button>
+    </div>
+    <div class="recipe-sec">
+      <div class="recipe-sec-title">Ingredients</div>
+      <div>${ingsHtml}</div>
+    </div>
+    <div class="recipe-sec" style="margin-top:16px;">
+      <div class="recipe-sec-title">Instructions</div>
+      ${stepsHtml}
+    </div>
+    <div style="height:32px;"></div>
+  </div>`;
+}
+
+// Open the assign sheet using a meal name (works from both favs and history)
+function openAssignSheetFromMeal(mealName) {
+  const meal = favs[mealName] || Object.values(favs).find(m => m.name === mealName);
+  if (!meal) return;
+
+  document.getElementById('assignTitle').textContent = mealName.length > 32 ? mealName.slice(0,30)+'…' : mealName;
+  document.getElementById('assignSub').textContent = 'Pick a day to add this to your plan';
+
+  const today = new Date(); today.setHours(0,0,0,0);
+  const days = Array.from({length: 28}, (_, i) => {
+    const d = new Date(today);
+    d.setDate(d.getDate() + i);
+    return d.toISOString().slice(0,10);
+  });
+
+  const listEl = document.getElementById('assignDayList');
+  listEl.innerHTML = days.map(ds => {
+    const d = new Date(ds + 'T12:00:00');
+    const label = d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+    const hasSel = sel[ds] !== undefined;
+    const existingMeals = getMealsForDay(ds);
+    const existing = hasSel ? existingMeals[sel[ds]]?.name : null;
+    const statusText = hasSel
+      ? `Replaces: ${existing ? (existing.length > 24 ? existing.slice(0,22)+'…' : existing) : 'current meal'}`
+      : 'Open';
+    return `<button class="assign-day-btn"
+      onclick="assignMealObjectToDay('${mealName.replace(/'/g,"\\'")}','${ds}')">
+      <div>
+        <div class="assign-day-date">${label}</div>
+        <div class="assign-day-status">${statusText}</div>
+      </div>
+      <div style="color:var(--rust);font-size:16px;">${hasSel ? '↺' : '+'}</div>
+    </button>`;
+  }).join('');
+
+  document.getElementById('assignOverlay').style.display = 'flex';
+}
+
+// Assign a meal by name to a specific day — injects as backup if needed
+function assignMealObjectToDay(mealName, toDs) {
+  const targetMeals = getMealsForDay(toDs);
+
+  // Check if it's already a natural option for this day
+  let targetIdx = targetMeals.findIndex(m => m.name === mealName);
+
+  if (targetIdx === -1) {
+    // Check BACKUP_MEALS
+    const backupIdx = BACKUP_MEALS.findIndex(b => b.name === mealName);
+    if (backupIdx !== -1) {
+      const current = refreshed[toDs] || [];
+      if (!current.includes(backupIdx)) refreshed[toDs] = [...current, backupIdx];
+      const updated = getMealsForDay(toDs);
+      targetIdx = updated.findIndex(m => m.name === mealName);
+    } else {
+      // From MEALS rotation — find which rotation slot has it
+      const matchingDate = MEAL_DATES.find(md =>
+        MEALS[md] && MEALS[md].some(m => m.name === mealName)
+      );
+      if (matchingDate) {
+        const mealIdx = MEALS[matchingDate].findIndex(m => m.name === mealName);
+        // We can't change which date this day maps to, so add it as a custom injected backup
+        // For now, fall back to option 0 of this day
+        targetIdx = 0;
+      } else {
+        targetIdx = 0;
+      }
+    }
+  }
+
+  sel[toDs] = Math.max(0, targetIdx);
+  save();
+  document.getElementById('assignOverlay').style.display = 'none';
+  if (document.getElementById('slidePanel').classList.contains('open')) closeSlide();
+
+  // Switch to Plan tab and scroll the day into view
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.btab').forEach(b => b.classList.remove('active'));
+  document.getElementById('panel-plan').classList.add('active');
+  document.querySelector('.btab[data-tab="plan"]').classList.add('active');
+  renderPlan();
+  renderGrocery();
+  updateMeta();
+
+  setTimeout(() => {
+    const row = document.getElementById(`dayrow-${toDs}`);
+    if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 150);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2130,7 +2311,7 @@ function renderStats() {
             ${note ? `<div class="history-card-note">📝 ${note}</div>` : ''}
             <div class="history-card-action">
               <span style="font-size:11px;color:var(--ink4);font-family:'Barlow Condensed',sans-serif;letter-spacing:0.1em;">Tap card to view recipe</span>
-              <button class="history-card-btn" onclick="openAssignSheet('${ds}')">Cook Again</button>
+              <button class="history-card-btn" onclick="openAssignSheetFromMeal('${meal.name.replace(/'/g,"\\'")}')">Cook Again</button>
             </div>
           </div>`;
         }).join('')}
@@ -2158,6 +2339,7 @@ function openHistoryRecipe(ds) {
     console.warn('History recipe not found for', ds, 'index', mi);
     return;
   }
+  slideOriginTab = 'stats';
   activeDate = ds;
   viewingRecipe = true;
   const d = new Date(ds + 'T12:00:00');
